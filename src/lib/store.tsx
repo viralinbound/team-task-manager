@@ -1,8 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as seed from "./seed";
 import { TEMPLATES } from "./templates";
+import { LIVE, supabase } from "./supabase/client";
+import { clientReview, loadAll, pushChanges, saveInvite } from "./live";
 import type {
   Activity,
   Board,
@@ -18,9 +20,11 @@ import type {
 } from "./types";
 
 /**
- * UI-only prototype store. Everything lives in memory (and in this browser's
- * localStorage so a refresh keeps your clicks). In Phase 1 this file is
- * replaced by Supabase queries with the same function names.
+ * The app's data store. Two modes, same screens:
+ *  - Demo (no Supabase keys): sample data in this browser's localStorage.
+ *  - Live (keys set): loads what the signed-in person may see from Supabase,
+ *    applies each click straight away on screen, then writes the changed rows
+ *    (see live.ts). Changes from other people arrive through Supabase Realtime.
  */
 interface Data {
   users: User[];
@@ -38,9 +42,17 @@ interface Data {
 
 const KEY = "workboard-demo-v3";
 const now = () => new Date().toISOString();
-const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
+// Real UUIDs, so new rows can be shown on screen before the database confirms them.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const uid = (_prefix: string) =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (ch) => (+ch ^ (Math.random() * 16) >> (+ch / 4)).toString(16));
 
-const initial = (): Data => ({
+const EMPTY: Data = { users: [], teams: [], clients: [], boards: [], lists: [], cards: [], labels: [], requests: [], notifications: [], activity: [], currentUserId: "" };
+const NOBODY: User = { id: "", name: "", email: "", role: "viewer", title: "", teamIds: [], color: "#1f6f5c" };
+
+const initial = (): Data => (LIVE ? EMPTY : {
   users: seed.users,
   teams: seed.teams,
   clients: seed.clients,
@@ -57,8 +69,52 @@ const initial = (): Data => ({
 function useStoreValue() {
   const [data, setData] = useState<Data>(initial);
   const [hydrated, setHydrated] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
+  // live-mode bookkeeping
+  const synced = useRef<Data | null>(null); // what the database is known to hold
+  const queue = useRef<Promise<void>>(Promise.resolve()); // writes run one after another
+  const pending = useRef(0);
+  const wantReload = useRef(false);
+
+  const reload = useCallback(async () => {
+    if (!LIVE) return;
+    if (pending.current > 0) {
+      wantReload.current = true; // wait until our own writes land, so the screen never jumps back
+      return;
+    }
+    wantReload.current = false;
+    try {
+      const {
+        data: { user },
+      } = await supabase().auth.getUser();
+      if (!user) {
+        // Signed out (e.g. on /login). The middleware guards every other page, so just stay empty.
+        if (!window.location.pathname.startsWith("/login")) window.location.href = "/login";
+        return;
+      }
+      const d = await loadAll(user.id);
+      if (pending.current > 0) {
+        wantReload.current = true;
+        return;
+      }
+      synced.current = d;
+      setData(d);
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
+
+  // first load
   useEffect(() => {
+    if (LIVE) {
+      reload();
+      return;
+    }
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) setData(JSON.parse(raw));
@@ -66,18 +122,67 @@ function useStoreValue() {
       /* storage blocked: run on seed data */
     }
     setHydrated(true);
-  }, []);
+  }, [reload]);
 
+  // live: other people's changes arrive here
+  useEffect(() => {
+    if (!LIVE || !hydrated || !data.currentUserId) return;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const ch = supabase()
+      .channel("workboard")
+      .on("postgres_changes", { event: "*", schema: "public" }, () => {
+        clearTimeout(t);
+        t = setTimeout(reload, 400);
+      })
+      .subscribe();
+    return () => {
+      clearTimeout(t);
+      supabase().removeChannel(ch);
+    };
+  }, [hydrated, data.currentUserId, reload]);
+
+  // save: demo keeps a local copy; live writes the rows that changed
   useEffect(() => {
     if (!hydrated) return;
-    try {
-      localStorage.setItem(KEY, JSON.stringify(data));
-    } catch {
-      /* ignore */
+    if (!LIVE) {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(data));
+      } catch {
+        /* ignore */
+      }
+      return;
     }
-  }, [data, hydrated]);
+    const before = synced.current;
+    if (!before || before === data) return;
+    synced.current = data;
+    const role = data.users.find((x) => x.id === data.currentUserId)?.role ?? "viewer";
+    pending.current++;
+    queue.current = queue.current
+      .then(() => pushChanges(before, data, role))
+      .catch((e) => {
+        setNotice({ tone: "error", text: `Couldn't save: ${e instanceof Error ? e.message : e}` });
+        wantReload.current = true;
+      })
+      .finally(() => {
+        pending.current--;
+        if (pending.current === 0 && wantReload.current) reload();
+      });
+  }, [data, hydrated, reload]);
 
-  const me = data.users.find((u) => u.id === data.currentUserId) ?? data.users[0];
+  /** Run a database call after any queued writes (used for client review). */
+  const enqueue = (fn: () => Promise<void>) => {
+    pending.current++;
+    queue.current = queue.current
+      .then(fn)
+      .catch((e) => setNotice({ tone: "error", text: `Couldn't save: ${e instanceof Error ? e.message : e}` }))
+      .finally(() => {
+        pending.current--;
+        wantReload.current = true;
+        if (pending.current === 0) reload();
+      });
+  };
+
+  const me = data.users.find((u) => u.id === data.currentUserId) ?? (LIVE ? NOBODY : data.users[0]);
 
   const log = (d: Data, text: string, boardId?: string): Activity[] => [
     { id: uid("ac"), at: now(), userId: d.currentUserId, text, boardId },
@@ -105,8 +210,16 @@ function useStoreValue() {
   const name = (d: Data, id: string) => d.users.find((u) => u.id === id)?.name.split(" ")[0] ?? "Someone";
 
   const actions = {
-    switchUser: (id: string) => setData((d) => ({ ...d, currentUserId: id })),
+    switchUser: (id: string) => {
+      if (!LIVE) setData((d) => ({ ...d, currentUserId: id }));
+    },
+    signOut: async () => {
+      if (LIVE) await supabase().auth.signOut();
+      window.location.href = "/login";
+    },
+    dismissNotice: () => setNotice(null),
     resetDemo: () => {
+      if (LIVE) return;
       try {
         localStorage.removeItem(KEY);
       } catch {}
@@ -245,7 +358,8 @@ function useStoreValue() {
         return { ...d, cards: patchCard(d, id, { archived }, archived ? "archived this card" : "restored this card"), activity: log(d, `${archived ? "archived" : "restored"} “${c.title}”`, c.boardId) };
       }),
 
-    approve: (id: string) =>
+    approve: (id: string) => {
+      if (LIVE) enqueue(() => clientReview(id, true));
       setData((d) => {
         const c = d.cards.find((x) => x.id === id)!;
         const done = d.lists.find((l) => l.boardId === c.boardId && l.kind === "done");
@@ -255,9 +369,11 @@ function useStoreValue() {
           notifications: notify(d, c.assigneeIds, `${name(d, d.currentUserId)} approved “${c.title}”`, `/boards/${c.boardId}?card=${id}`, "approval"),
           activity: log(d, `approved “${c.title}”`, c.boardId),
         };
-      }),
+      });
+    },
 
-    requestChanges: (id: string, text: string) =>
+    requestChanges: (id: string, text: string) => {
+      if (LIVE) enqueue(() => clientReview(id, false));
       setData((d) => {
         const c = d.cards.find((x) => x.id === id)!;
         const doing = d.lists.find((l) => l.boardId === c.boardId && l.name === "In Progress");
@@ -270,14 +386,15 @@ function useStoreValue() {
           notifications: notify(d, c.assigneeIds, `${name(d, d.currentUserId)} asked for changes on “${c.title}”`, `/boards/${c.boardId}?card=${id}`, "approval"),
           activity: log(d, `asked for changes on “${c.title}”`, c.boardId),
         };
-      }),
+      });
+    },
 
     addRequest: (r: Omit<ClientRequest, "id" | "at" | "status" | "by">) =>
       setData((d) => {
         const reqList = d.lists.find((l) => l.boardId === r.boardId && l.kind === "requests");
         const cardId = uid("k");
         const board = d.boards.find((b) => b.id === r.boardId);
-        const admins = d.users.filter((u) => u.role === "admin" || (board?.memberIds.includes(u.id) && u.teamIds.includes("t-sales"))).map((u) => u.id);
+        const admins = d.users.filter((u) => u.role === "admin" || (board?.memberIds.includes(u.id) && u.teamIds.some((t) => d.teams.find((x) => x.id === t)?.name === "Sales"))).map((u) => u.id);
         const newCard: Card = {
           id: cardId,
           boardId: r.boardId,
@@ -313,7 +430,7 @@ function useStoreValue() {
     addBoard: (b: Omit<Board, "id">, templateId = b.clientId ? "client" : "blank") => {
       const id = uid("b");
       const tpl = TEMPLATES.find((t) => t.id === templateId) ?? TEMPLATES[0];
-      const lists: List[] = tpl.lists.map((l, i) => ({ id: `${id}-l${i}`, boardId: id, name: l.name, kind: l.kind }));
+      const lists: List[] = tpl.lists.map((l) => ({ id: uid("l"), boardId: id, name: l.name, kind: l.kind }));
       setData((d) => {
         const starter: Card[] = tpl.starter.map(([li, title], i) => ({
           id: uid("k"),
@@ -355,11 +472,22 @@ function useStoreValue() {
         const id = uid("c");
         return { ...d, clients: [...d.clients, { image: `https://picsum.photos/seed/client-${id}/200/200`, ...c, id }], activity: log(d, `added client “${c.name}”`) };
       }),
-    inviteUser: (u: Omit<User, "id">) => setData((d) => ({ ...d, users: [...d.users, { ...u, id: uid("u") }], activity: log(d, `invited ${u.name}`) })),
+    inviteUser: (u: Omit<User, "id">) => {
+      if (!LIVE) {
+        setData((d) => ({ ...d, users: [...d.users, { ...u, id: uid("u") }], activity: log(d, `invited ${u.name}`) }));
+        return;
+      }
+      // Live: save the invite; they get this role the first time they sign in with that email.
+      enqueue(async () => {
+        await saveInvite(u, data.currentUserId);
+        setNotice({ tone: "ok", text: `Invite saved for ${u.email}. Ask ${u.name.split(" ")[0]} to sign in at ${window.location.origin}/login with that email.` });
+      });
+      setData((d) => ({ ...d, activity: log(d, `invited ${u.name}`) }));
+    },
     addTeam: (name: string, color: string) => setData((d) => ({ ...d, teams: [...d.teams, { id: uid("t"), name, color }] })),
   };
 
-  return { ...data, me, hydrated, ...actions };
+  return { ...data, me, hydrated, live: LIVE, loadError, notice, reload, ...actions };
 }
 
 type Store = ReturnType<typeof useStoreValue>;

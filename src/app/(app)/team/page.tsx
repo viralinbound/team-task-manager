@@ -151,7 +151,7 @@ function Invite({ open, onClose }: { open: boolean; onClose: () => void }) {
         }}
       >
         <h2 className="font-display text-2xl font-semibold">Invite a person</h2>
-        <p className="mt-1 text-sm text-muted">They get an email link valid for 7 days.</p>
+        <p className="mt-1 text-sm text-muted">{s.live ? "They sign in at the login page with this email and get this role straight away." : "They get an email link valid for 7 days."}</p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <Field label="Full name">
             <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
@@ -166,7 +166,7 @@ function Invite({ open, onClose }: { open: boolean; onClose: () => void }) {
             <select value={role} onChange={(e) => setRole(e.target.value as Role)} className={inputCls}>
               <option value="member">Member</option>
               <option value="admin">Admin</option>
-              <option value="viewer">Viewer (read-only)</option>
+              {!s.live && <option value="viewer">Viewer (read-only)</option>}
             </select>
           </Field>
           <div className="sm:col-span-2">

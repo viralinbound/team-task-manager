@@ -139,6 +139,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Link href="/settings" className="focus-ring rounded-md p-1.5 text-faint hover:bg-sunken hover:text-ink" aria-label="Settings">
           <Icon name="settings" />
         </Link>
+        {s.live && (
+          <button onClick={() => s.signOut()} className="focus-ring rounded-md p-1.5 text-faint hover:bg-sunken hover:text-ink" aria-label="Sign out" title="Sign out">
+            <Icon name="logout" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -176,9 +181,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="flex-1" />
         )}
         <div className="flex-1 sm:hidden" />
-        <ViewAs />
+        {!s.live && <ViewAs />}
         <Bell />
       </header>
+
+      {s.notice && (
+        <div className={cn("flex items-start gap-3 border-b px-4 py-2.5 text-sm sm:px-6", s.notice.tone === "error" ? "border-urgent/20 bg-urgent-soft text-urgent" : "border-ok/20 bg-ok-soft text-ok")}>
+          <p className="flex-1">{s.notice.text}</p>
+          <button onClick={s.dismissNotice} aria-label="Dismiss" className="rounded p-0.5 hover:bg-black/5">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+      )}
 
       <main className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
     </div>

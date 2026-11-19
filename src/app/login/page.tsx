@@ -2,12 +2,90 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Avatar, Button, Field, inputCls } from "@/components/ui";
 import { useStore } from "@/lib/store";
+import { LIVE, supabase } from "@/lib/supabase/client";
 import { cn } from "@/lib/format";
 
 export default function LoginPage() {
+  return LIVE ? <LiveLogin /> : <DemoLogin />;
+}
+
+/** Real sign-in: we email a one-time link. No passwords to store or reset. */
+function LiveLogin() {
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("error")) setError("That sign-in link has expired or was already used. Request a new one.");
+    supabase()
+      .auth.getUser()
+      .then(({ data }) => data.user && window.location.replace("/"));
+  }, []);
+
+  return (
+    <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
+      <div className="relative hidden overflow-hidden bg-ink p-12 text-canvas lg:flex lg:flex-col">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="https://picsum.photos/seed/workboard-team/1200/1500" alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/70 to-ink/30" />
+        <span className="relative font-display text-2xl font-semibold">Workboard</span>
+        <div className="relative mt-auto max-w-md">
+          <h1 className="font-display text-[44px] leading-[1.05] font-semibold">Every task has an owner. Every client knows where things stand.</h1>
+          <p className="mt-5 text-[15px] leading-relaxed text-canvas/75">Assign work to people or teams, see your own day at a glance, and let clients approve work without a single WhatsApp follow-up.</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center px-5 py-12 sm:px-10">
+        <div className="w-full max-w-sm">
+          <h2 className="font-display text-3xl font-semibold">Sign in</h2>
+          {state === "sent" ? (
+            <div className="mt-8 rounded-xl bg-ok-soft p-5 text-sm text-ok">
+              <p className="font-semibold">Check your email</p>
+              <p className="mt-1">We sent a sign-in link to {email}. Open it on this device. It works once and expires in an hour.</p>
+              <button onClick={() => setState("idle")} className="mt-3 text-xs font-semibold underline">
+                Use a different email
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="mt-1.5 text-sm text-muted">Enter your work email and we&apos;ll send you a sign-in link.</p>
+              <form
+                className="mt-8 space-y-4"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setError(null);
+                  setState("sending");
+                  const { error: err } = await supabase().auth.signInWithOtp({
+                    email: email.trim(),
+                    options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+                  });
+                  if (err) {
+                    setError(err.message);
+                    setState("idle");
+                  } else setState("sent");
+                }}
+              >
+                <Field label="Email">
+                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" className={inputCls} />
+                </Field>
+                {error && <p className="rounded-lg bg-urgent-soft px-3 py-2 text-xs text-urgent">{error}</p>}
+                <Button type="submit" className="w-full" disabled={state === "sending"}>
+                  {state === "sending" ? "Sending…" : "Email me a sign-in link"}
+                </Button>
+              </form>
+              <p className="mt-6 text-xs leading-relaxed text-muted">Only people your admin has invited can get in. If you were invited, use the same email the invite went to.</p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DemoLogin() {
   const router = useRouter();
   const s = useStore();
   const [mode, setMode] = useState<"login" | "forgot" | "invite">("login");
