@@ -1,26 +1,66 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-canvas: #f5f4f0;
+  --color-surface: #ffffff;
+  --color-sunken: #eeece6;
+  --color-line: #e3e0d8;
+  --color-line-strong: #cfcbc0;
+  --color-ink: #1d1c1a;
+  --color-ink-soft: #3d3b37;
+  --color-muted: #6f6b63;
+  --color-faint: #9a958b;
+  --color-brand: #1f6f5c;
+  --color-brand-strong: #17584a;
+  --color-brand-soft: #e3f0ec;
+  --color-urgent: #c2410c;
+  --color-urgent-soft: #fdeee6;
+  --color-high: #b7791f;
+  --color-high-soft: #fbf1dc;
+  --color-medium: #3f6db3;
+  --color-medium-soft: #e8eff9;
+  --color-low: #6f6b63;
+  --color-low-soft: #efeee9;
+  --color-ok: #2f7d4f;
+  --color-ok-soft: #e4f3e9;
 }
 
+/* inline: these point at next/font variables set on <body>, so they must resolve where used */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-brand-soft);
+}
+
+/* thin, quiet scrollbars for the board */
+.scroll-thin::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 999px;
+  border: 3px solid var(--color-canvas);
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
 }
