@@ -32,7 +32,7 @@ export default function AdminDashboard() {
   const maxLoad = Math.max(4, ...load.map((l) => l.open));
 
   const exportCsv = () => {
-    const rows = [["Task", "Board", "Client", "Assignees", "Team", "Status", "Priority", "Due"]];
+    const rows = [["Task", "Project", "Client", "Assignees", "Team", "Status", "Priority", "Due"]];
     cards.forEach((c) => {
       const b = boardById(c.boardId);
       rows.push([c.title, b?.name ?? "", clientById(b?.clientId)?.name ?? "Internal", c.assigneeIds.map((a) => userById(a)?.name).join("; "), teamById(c.teamId)?.name ?? "", s.lists.find((l) => l.id === c.listId)?.name ?? "", c.priority, c.due ?? ""]);
@@ -218,8 +218,8 @@ export default function AdminDashboard() {
             </ul>
           </Panel>
 
-          {/* Boards */}
-          <Panel title="Board progress">
+          {/* Projects */}
+          <Panel title="Project progress">
             <ul className="divide-y divide-line">
               {s.boards.map((b) => {
                 const bc = s.cards.filter((c) => c.boardId === b.id && !c.archived);

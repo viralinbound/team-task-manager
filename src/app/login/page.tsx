@@ -41,7 +41,7 @@ export default function LoginPage() {
                   <Avatar key={u.id} user={u} size={36} ring />
                 ))}
             </span>
-            <span className="text-sm text-canvas/75">Your whole team, one board.</span>
+            <span className="text-sm text-canvas/75">Your whole team, one place.</span>
           </div>
         </div>
       </div>

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useHelpers, useStore } from "@/lib/store";
 import { cn, dueState, shortDate, timeAgo } from "@/lib/format";
 import { Avatar, Button, Empty, Field, Icon, inputCls, Panel, PriorityPill, Progress } from "@/components/ui";
+import { useNewProject } from "@/components/NewProject";
 
 export default function ClientDetail() {
   const { id } = useParams<{ id: string }>();
@@ -15,6 +16,7 @@ export default function ClientDetail() {
   const [inviting, setInviting] = useState(false);
   const [email, setEmail] = useState("");
   const [nm, setNm] = useState("");
+  const newProject = useNewProject();
 
   if (!c) return <Empty title="Client not found" />;
   const boards = s.boards.filter((b) => b.clientId === c.id);
@@ -47,11 +49,21 @@ export default function ClientDetail() {
         <Button variant="outline" onClick={() => setInviting(true)}>
           <Icon name="plus" size={16} /> Invite to portal
         </Button>
+        <Button onClick={() => newProject({ clientId: c.id })}>
+          <Icon name="plus" size={16} /> New project
+        </Button>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-6">
-          <Panel title={`Projects (${boards.length})`}>
+          <Panel
+            title={`Projects (${boards.length})`}
+            action={
+              <button onClick={() => newProject({ clientId: c.id })} className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline">
+                <Icon name="plus" size={14} /> Add project
+              </button>
+            }
+          >
             <ul className="divide-y divide-line">
               {boards.map((b) => {
                 const bc = cards.filter((k) => k.boardId === b.id);
@@ -73,7 +85,14 @@ export default function ClientDetail() {
                   </li>
                 );
               })}
-              {boards.length === 0 && <li className="px-5 py-6 text-sm text-muted">No boards yet. Create one from Home and pick this client.</li>}
+              {boards.length === 0 && (
+                <li className="px-5 py-8 text-center">
+                  <p className="text-sm text-muted">No projects for {c.name} yet.</p>
+                  <Button size="sm" className="mt-3" onClick={() => newProject({ clientId: c.id })}>
+                    <Icon name="plus" size={14} /> Create the first project
+                  </Button>
+                </li>
+              )}
             </ul>
           </Panel>
 

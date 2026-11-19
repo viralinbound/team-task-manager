@@ -14,7 +14,11 @@ import {
   Download,
   Eye,
   Flag,
+  FolderKanban,
   House,
+  LayoutGrid,
+  List as ListIcon,
+  Calendar,
   Inbox,
   ListChecks,
   Lock,
@@ -67,6 +71,10 @@ const ICONS: Record<string, LucideIcon> = {
   menu: Menu,
   sparkle: Sparkles,
   task: CheckSquare,
+  folder: FolderKanban,
+  grid: LayoutGrid,
+  rows: ListIcon,
+  calendar: Calendar,
 };
 
 export function Icon({ name, className, size = 18, fill }: { name: string; className?: string; size?: number; fill?: boolean }) {

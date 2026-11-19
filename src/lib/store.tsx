@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as seed from "./seed";
+import { TEMPLATES } from "./templates";
 import type {
   Activity,
   Board,
@@ -35,7 +36,7 @@ interface Data {
   currentUserId: string;
 }
 
-const KEY = "workboard-demo-v2";
+const KEY = "workboard-demo-v3";
 const now = () => new Date().toISOString();
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -308,23 +309,42 @@ function useStoreValue() {
     markRead: (id: string) => setData((d) => ({ ...d, notifications: d.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)) })),
     markAllRead: () => setData((d) => ({ ...d, notifications: d.notifications.map((n) => (n.userId === d.currentUserId ? { ...n, read: true } : n)) })),
 
-    addBoard: (b: Omit<Board, "id">) => {
+    /** Create a project from a template: its lists, plus any starter cards. */
+    addBoard: (b: Omit<Board, "id">, templateId = b.clientId ? "client" : "blank") => {
       const id = uid("b");
-      setData((d) => ({
-        ...d,
-        boards: [...d.boards, { cover: `https://picsum.photos/seed/cover-${id}/640/260`, ...b, id }],
-        lists: [
-          ...d.lists,
-          ...(b.clientId ? [{ id: `${id}-req`, boardId: id, name: "Requests", kind: "requests" as const }] : []),
-          { id: `${id}-todo`, boardId: id, name: "To Do" },
-          { id: `${id}-doing`, boardId: id, name: "In Progress" },
-          ...(b.clientId ? [{ id: `${id}-approval`, boardId: id, name: "Client Approval", kind: "approval" as const }] : []),
-          { id: `${id}-done`, boardId: id, name: "Done", kind: "done" as const },
-        ],
-        activity: log(d, `created board “${b.name}”`, id),
-      }));
+      const tpl = TEMPLATES.find((t) => t.id === templateId) ?? TEMPLATES[0];
+      const lists: List[] = tpl.lists.map((l, i) => ({ id: `${id}-l${i}`, boardId: id, name: l.name, kind: l.kind }));
+      setData((d) => {
+        const starter: Card[] = tpl.starter.map(([li, title], i) => ({
+          id: uid("k"),
+          boardId: id,
+          listId: lists[li].id,
+          order: i,
+          title,
+          description: "",
+          assigneeIds: [],
+          assignedBy: d.currentUserId,
+          priority: "medium",
+          labels: [],
+          checklist: [],
+          comments: [],
+          clientVisible: !!b.clientId,
+          createdAt: now(),
+          history: [{ at: now(), userId: d.currentUserId, text: `added from the ${tpl.name} template` }],
+          attachments: [],
+        }));
+        return {
+          ...d,
+          boards: [...d.boards, { cover: `https://picsum.photos/seed/cover-${id}/640/260`, status: "active", ...b, id }],
+          lists: [...d.lists, ...lists],
+          cards: [...d.cards, ...starter],
+          notifications: notify(d, b.memberIds, `${name(d, d.currentUserId)} added you to the project “${b.name}”`, `/boards/${id}`, "team"),
+          activity: log(d, `created project “${b.name}”`, id),
+        };
+      });
       return id;
     },
+    updateBoard: (id: string, patch: Partial<Board>) => setData((d) => ({ ...d, boards: d.boards.map((b) => (b.id === id ? { ...b, ...patch } : b)) })),
 
     addList: (boardId: string, name: string) => setData((d) => ({ ...d, lists: [...d.lists, { id: uid("l"), boardId, name }] })),
     renameList: (id: string, name: string) => setData((d) => ({ ...d, lists: d.lists.map((l) => (l.id === id ? { ...l, name } : l)) })),

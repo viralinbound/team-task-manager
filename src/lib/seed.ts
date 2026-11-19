@@ -70,6 +70,13 @@ export const boards: Board[] = [
 ];
 
 boards.forEach((b) => (b.cover = pic(`cover-${b.id}`, 640, 260)));
+const DETAILS: Record<string, Partial<Board>> = {
+  "b-sharma-web": { description: "New 8-page website with gallery, services and a site-visit booking flow.", startDate: daysFromNow(-12), dueDate: daysFromNow(18), status: "active" },
+  "b-green-social": { description: "30 posts, 8 reels and festive offer creatives for December.", startDate: daysFromNow(-6), dueDate: daysFromNow(24), status: "active" },
+  "b-apex-ads": { description: "Google Search ads for used-car test drives in Bengaluru.", startDate: daysFromNow(-4), dueDate: daysFromNow(10), status: "active" },
+  "b-internal": { description: "Invoices, hiring, portfolio and everything that runs the agency.", status: "active" },
+};
+boards.forEach((b) => Object.assign(b, DETAILS[b.id]));
 
 const stdLists = (boardId: string): List[] => [
   { id: `${boardId}-req`, boardId, name: "Requests", kind: "requests" },

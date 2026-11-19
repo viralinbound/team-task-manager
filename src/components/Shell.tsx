@@ -6,9 +6,11 @@ import { useEffect, useRef, useState } from "react";
 import { useHelpers, useStore } from "@/lib/store";
 import { cn, timeAgo } from "@/lib/format";
 import { Avatar, Icon } from "./ui";
+import { useNewProject } from "./NewProject";
 
 const staffNav = [
   { href: "/", label: "Home", icon: "home" },
+  { href: "/projects", label: "Projects", icon: "folder" },
   { href: "/my", label: "My tasks", icon: "me" },
   { href: "/notifications", label: "Notifications", icon: "bell" },
   { href: "/search", label: "Search", icon: "search" },
@@ -30,6 +32,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const newProject = useNewProject();
   const isClient = s.me.role === "client";
   const unread = s.notifications.filter((n) => n.userId === s.me.id && !n.read).length;
 
@@ -97,7 +100,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
-        <p className="mb-1.5 px-3 text-[11px] font-semibold tracking-wide text-faint uppercase">{isClient ? "Projects" : "Boards"}</p>
+        <div className="mb-1.5 flex items-center justify-between pr-1.5 pl-3">
+          <p className="text-[11px] font-semibold tracking-wide text-faint uppercase">{isClient ? "Your projects" : "Projects"}</p>
+          {!isClient && s.me.role !== "viewer" && (
+            <button onClick={() => newProject()} className="focus-ring grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-sunken hover:text-brand" aria-label="New project" title="New project">
+              <Icon name="plus" size={15} />
+            </button>
+          )}
+        </div>
         <nav className="flex flex-col gap-0.5">
           {visibleBoards.map((b) => {
             const href = isClient ? `/portal/boards/${b.id}` : `/boards/${b.id}`;
@@ -160,7 +170,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             }}
           >
             <Icon name="search" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-faint" size={16} />
-            <input name="q" placeholder="Search tasks, boards, people…" className="h-9 w-full rounded-lg border border-line bg-surface pr-3 pl-9 text-sm outline-none placeholder:text-faint focus:border-brand" />
+            <input name="q" placeholder="Search tasks, projects, people…" className="h-9 w-full rounded-lg border border-line bg-surface pr-3 pl-9 text-sm outline-none placeholder:text-faint focus:border-brand" />
           </form>
         ) : (
           <div className="flex-1" />

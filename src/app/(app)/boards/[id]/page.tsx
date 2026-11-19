@@ -33,7 +33,7 @@ function BoardInner() {
 
   const board = boardById(id);
   if (!board || !visibleBoards.some((b) => b.id === id)) {
-    return <Empty title="Board not found" sub="It may have been removed, or you don't have access."><Link href="/" className="text-sm font-semibold text-brand">Back home</Link></Empty>;
+    return <Empty title="Project not found" sub="It may have been removed, or you don't have access."><Link href="/" className="text-sm font-semibold text-brand">Back home</Link></Empty>;
   }
   const client = clientById(board.clientId);
   const open = (cid: string | null) => router.replace(cid ? `${path}?card=${cid}` : path, { scroll: false });
@@ -65,11 +65,18 @@ function BoardInner() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={client.image} alt="" className="h-4 w-4 rounded object-cover" />
             )}
-            {client ? client.name : "Internal board"}
+            {client ? client.name : "Internal project"}
           </p>
           <h1 className="font-display text-2xl leading-tight font-semibold">{board.name}</h1>
+          {(board.description || board.dueDate) && (
+            <p className="mt-0.5 max-w-xl truncate text-xs text-muted">
+              {board.dueDate && <span className="font-semibold text-ink-soft">Deadline {new Date(board.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
+              {board.dueDate && board.description && " · "}
+              {board.description}
+            </p>
+          )}
         </div>
-        <button onClick={() => s.toggleStar(board.id)} className={cn("rounded-md p-1.5", board.starred ? "text-high" : "text-faint hover:text-high")} aria-label="Star board">
+        <button onClick={() => s.toggleStar(board.id)} className={cn("rounded-md p-1.5", board.starred ? "text-high" : "text-faint hover:text-high")} aria-label="Star project">
           <Icon name="star" size={18} fill={board.starred} />
         </button>
         <div className="ml-auto flex items-center gap-3">

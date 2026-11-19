@@ -54,7 +54,7 @@ export default function MyTasks() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader eyebrow="My dashboard" title="My tasks" sub="Everything assigned to you, across every board." />
+      <PageHeader eyebrow="My dashboard" title="My tasks" sub="Everything assigned to you, across every project." />
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[

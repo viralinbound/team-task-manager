@@ -35,7 +35,7 @@ function SearchInner() {
       <PageHeader title="Search" />
       <div className="relative mb-8">
         <Icon name="search" className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-faint" />
-        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search tasks, boards, clients, people…" className={`${inputCls} h-12 pl-11 text-base`} />
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search tasks, projects, clients, people…" className={`${inputCls} h-12 pl-11 text-base`} />
       </div>
 
       {!term && <Empty title="Type to search" sub="Try “logo”, “Apex” or “Priya”." />}
@@ -43,7 +43,7 @@ function SearchInner() {
 
       {boards.length > 0 && (
         <section className="mb-8">
-          <h2 className="mb-3 text-xs font-semibold tracking-wide text-faint uppercase">Boards</h2>
+          <h2 className="mb-3 text-xs font-semibold tracking-wide text-faint uppercase">Projects</h2>
           <div className="flex flex-wrap gap-2">
             {boards.map((b) => (
               <Link key={b.id} href={`/boards/${b.id}`} className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm font-medium hover:border-line-strong">

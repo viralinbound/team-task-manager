@@ -39,6 +39,10 @@ export interface Board {
   memberIds: string[];
   starred?: boolean;
   cover?: string;
+  description?: string;
+  startDate?: string;
+  dueDate?: string;
+  status?: "active" | "on-hold" | "completed";
 }
 
 export interface List {

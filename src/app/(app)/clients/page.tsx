@@ -51,7 +51,7 @@ export default function ClientsPage() {
                 <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize", STATUS[c.status])}>{c.status}</span>
               </div>
               <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-                <Stat n={boards.length} l="Boards" />
+                <Stat n={boards.length} l="Projects" />
                 <Stat n={cc.length - d} l="Open" />
                 <Stat n={od} l="Overdue" tone={od ? "text-urgent" : ""} />
               </div>
