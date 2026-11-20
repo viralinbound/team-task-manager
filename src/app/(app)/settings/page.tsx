@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { Avatar, Button, Field, Icon, inputCls, PageHeader, Panel } from "@/components/ui";
 
@@ -18,33 +18,62 @@ export default function SettingsPage() {
   const s = useStore();
   const router = useRouter();
   const [saved, setSaved] = useState(false);
+  const [name, setName] = useState(s.me.name);
+  const [title, setTitle] = useState(s.me.title);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
   const [prefs, setPrefs] = useState<Record<string, { app: boolean; email: boolean }>>(() => Object.fromEntries(NOTIFS.map(([k]) => [k, { app: k !== "digest", email: ["assigned", "approval", "digest"].includes(k) }])));
 
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeader title="Settings" sub="Your profile, password and notification choices." />
+      <PageHeader title="Settings" sub={s.live ? "Your name, job title and photo." : "Your profile, password and notification choices."} />
       <div className="space-y-6">
         <Panel title="Profile">
           <form
             className="grid gap-4 p-5 sm:grid-cols-[auto_1fr]"
             onSubmit={(e) => {
               e.preventDefault();
+              if (!name.trim()) return;
+              s.updateMe({ name: name.trim(), title: title.trim() });
               setSaved(true);
               setTimeout(() => setSaved(false), 2000);
             }}
           >
             <div className="flex flex-col items-center gap-2">
               <Avatar user={s.me} size={72} />
-              <button type="button" className="text-xs font-semibold text-brand hover:underline">
-                Change photo
+              <button type="button" onClick={() => photoInput.current?.click()} disabled={photoBusy} className="text-xs font-semibold text-brand hover:underline disabled:opacity-50">
+                {photoBusy ? "Uploading…" : "Change photo"}
               </button>
+              <input
+                ref={photoInput}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!f) return;
+                  if (f.size > 3 * 1024 * 1024) return setPhotoError("Photo must be under 3 MB.");
+                  setPhotoBusy(true);
+                  setPhotoError(null);
+                  try {
+                    s.updateMe({ photo: await s.uploadPhoto(f) });
+                  } catch (err) {
+                    setPhotoError(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setPhotoBusy(false);
+                  }
+                }}
+              />
+              {photoError && <span className="max-w-[9rem] text-center text-[11px] text-urgent">{photoError}</span>}
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Full name">
-                <input defaultValue={s.me.name} className={inputCls} />
+                <input value={name} onChange={(e) => setName(e.target.value)} required className={inputCls} />
               </Field>
               <Field label="Job title">
-                <input defaultValue={s.me.title} className={inputCls} />
+                <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
               </Field>
               <div className="sm:col-span-2">
                 <Field label="Email">
@@ -63,6 +92,8 @@ export default function SettingsPage() {
           </form>
         </Panel>
 
+        {!s.live && (
+        <>
         <Panel title="Notifications">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -111,8 +142,10 @@ export default function SettingsPage() {
             </div>
           </form>
         </Panel>
+        </>
+        )}
 
-        <Button variant="ghost" onClick={() => router.push("/login")} className="text-urgent">
+        <Button variant="ghost" onClick={() => (s.live ? s.signOut() : router.push("/login"))} className="text-urgent">
           <Icon name="logout" size={16} /> Sign out
         </Button>
       </div>

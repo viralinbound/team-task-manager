@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useHelpers, useStore } from "@/lib/store";
+import { Attachments } from "./Attachments";
 import type { Priority } from "@/lib/types";
 import { cn, PRIORITY, timeAgo } from "@/lib/format";
 import { Avatar, Button, DueChip, Icon, inputCls, Modal, PriorityPill, Progress } from "./ui";
@@ -177,31 +178,7 @@ export function CardModal({ cardId, onClose, client }: { cardId: string | null; 
             </section>
           )}
 
-          {card.attachments.length > 0 && (
-            <section>
-              <h3 className="mb-2 text-xs font-semibold tracking-wide text-faint uppercase">Attachments</h3>
-              <ul className="grid gap-2 sm:grid-cols-2">
-                {card.attachments.map((a) => (
-                  <li key={a.id} className="flex items-center gap-3 rounded-lg border border-line px-3 py-2.5">
-                    {a.thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={a.thumb} alt="" className="h-11 w-14 shrink-0 rounded-md object-cover" />
-                    ) : (
-                      <span className="grid h-11 w-14 shrink-0 place-items-center rounded-md bg-sunken text-muted">
-                        <Icon name="clip" size={18} />
-                      </span>
-                    )}
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">{a.name}</span>
-                      <span className="text-xs text-faint">
-                        {a.name.split(".").pop()?.toUpperCase()} · {a.size}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          <Attachments card={card} canEdit={canEdit} />
 
           <section>
             <div className="mb-3 flex gap-1 border-b border-line">

@@ -15,7 +15,9 @@ export default function NewRequest() {
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [wantedBy, setWantedBy] = useState("");
-  const [files, setFiles] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
   if (sent) {
@@ -51,11 +53,22 @@ export default function NewRequest() {
       <PageHeader eyebrow="Client portal" title="New request" sub="Tell the team what you need. They'll review it and assign it." />
       <form
         className="space-y-5 rounded-2xl border border-line bg-surface p-6"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          if (!title.trim() || !boardId) return;
-          s.addRequest({ clientId: s.me.clientId!, boardId, title: title.trim(), description, priority, wantedBy: wantedBy || undefined });
-          setSent(true);
+          if (!title.trim() || !boardId || busy) return;
+          setBusy(true);
+          setError(null);
+          try {
+            // Files go up first, so the new task is created with them already attached.
+            const cardId = crypto.randomUUID();
+            const attachments = files.length ? await s.uploadFiles(boardId, cardId, files) : [];
+            s.addRequest({ clientId: s.me.clientId!, boardId, title: title.trim(), description, priority, wantedBy: wantedBy || undefined }, { cardId, attachments });
+            setSent(true);
+          } catch (err) {
+            setError(`Couldn't upload your files: ${err instanceof Error ? err.message : err}`);
+          } finally {
+            setBusy(false);
+          }
         }}
       >
         <Field label="Project">
@@ -91,10 +104,11 @@ export default function NewRequest() {
           <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-line-strong px-4 py-6 text-center hover:border-brand">
             <Icon name="clip" className="text-faint" />
             <span className="mt-2 text-sm font-medium">Click to attach files</span>
-            <span className="text-xs text-faint">Images, PDFs, documents</span>
-            <input type="file" multiple className="hidden" onChange={(e) => setFiles(Array.from(e.target.files ?? []).map((f) => f.name))} />
+            <span className="text-xs text-faint">Images, PDFs, documents · up to 25 MB each</span>
+            <input type="file" multiple className="hidden" onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
           </label>
-          {files.length > 0 && <p className="mt-2 text-xs text-muted">{files.join(", ")}</p>}
+          {files.length > 0 && <p className="mt-2 text-xs text-muted">{files.map((f) => f.name).join(", ")}</p>}
+          {error && <p className="mt-2 rounded-lg bg-urgent-soft px-3 py-2 text-xs text-urgent">{error}</p>}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Link href="/portal">
@@ -102,8 +116,8 @@ export default function NewRequest() {
               Cancel
             </Button>
           </Link>
-          <Button type="submit" disabled={!title.trim()}>
-            Send request
+          <Button type="submit" disabled={!title.trim() || busy}>
+            {busy ? "Sending…" : "Send request"}
           </Button>
         </div>
       </form>

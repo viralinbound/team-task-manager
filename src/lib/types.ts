@@ -92,8 +92,19 @@ export interface Card {
   archived?: boolean;
   createdAt: string;
   history: HistoryItem[];
-  attachments: { id: string; name: string; size: string; thumb?: string }[];
+  attachments: Attachment[];
   cover?: string;
+}
+
+/** A file on a task. Live: `path` points into the private "attachments" bucket. Demo: `url` is a local preview. */
+export interface Attachment {
+  id: string;
+  name: string;
+  size: string;
+  type?: string;
+  path?: string;
+  url?: string;
+  thumb?: string;
 }
 
 export interface ClientRequest {

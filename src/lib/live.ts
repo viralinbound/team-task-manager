@@ -1,5 +1,5 @@
 import { supabase } from "./supabase/client";
-import type { Activity, Board, Card, Client, ClientRequest, Comment, Label, List, Notification, Team, User } from "./types";
+import type { Activity, Attachment, Board, Card, Client, ClientRequest, Comment, Label, List, Notification, Team, User } from "./types";
 
 /**
  * The bridge between the app's in-memory data and the database.
@@ -298,4 +298,44 @@ export async function saveInvite(x: Omit<User, "id" | "photo">, invitedBy: strin
       .upsert({ email: x.email.trim().toLowerCase(), name: x.name, role: x.role, title: x.title, team_ids: x.teamIds, client_id: x.clientId ?? null, color: x.color, invited_by: invitedBy }),
     "invite",
   );
+}
+
+/* ---------------- files ---------------- */
+export const fileSize = (bytes: number) =>
+  bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
+
+const safeName = (name: string) => name.normalize("NFKD").replace(/[^\w.\-]+/g, "-").replace(/-+/g, "-").slice(-80) || "file";
+
+/** Upload a task file into the private bucket at <board>/<card>/<id>-<name>. */
+export async function uploadAttachment(boardId: string, cardId: string, file: File): Promise<Attachment> {
+  const id = crypto.randomUUID();
+  const path = `${boardId}/${cardId}/${id}-${safeName(file.name)}`;
+  const { error } = await supabase().storage.from("attachments").upload(path, file, { contentType: file.type || undefined, upsert: false });
+  if (error) throw new Error(`upload ${file.name}: ${error.message}`);
+  return { id, name: file.name, size: fileSize(file.size), type: file.type || undefined, path };
+}
+
+/** Short-lived download link for a private task file (cached for its lifetime). */
+const signed = new Map<string, { url: string; until: number }>();
+export async function attachmentUrl(path: string): Promise<string> {
+  const hit = signed.get(path);
+  if (hit && hit.until > Date.now()) return hit.url;
+  const { data, error } = await supabase().storage.from("attachments").createSignedUrl(path, 3600);
+  if (error || !data) throw new Error(error?.message ?? "no link");
+  signed.set(path, { url: data.signedUrl, until: Date.now() + 50 * 60 * 1000 });
+  return data.signedUrl;
+}
+
+export async function removeAttachment(path: string) {
+  const { error } = await supabase().storage.from("attachments").remove([path]);
+  if (error) throw new Error(`remove file: ${error.message}`);
+}
+
+/** Profile photo into the public "avatars" bucket; returns its public URL. */
+export async function uploadAvatar(userId: string, file: File): Promise<string> {
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase().storage.from("avatars").upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw new Error(`photo: ${error.message}`);
+  return supabase().storage.from("avatars").getPublicUrl(path).data.publicUrl;
 }

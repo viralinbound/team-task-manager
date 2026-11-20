@@ -4,9 +4,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as seed from "./seed";
 import { TEMPLATES } from "./templates";
 import { LIVE, supabase } from "./supabase/client";
-import { clientReview, loadAll, pushChanges, saveInvite } from "./live";
+import { attachmentUrl, clientReview, fileSize, loadAll, pushChanges, removeAttachment as deleteFile, saveInvite, uploadAttachment, uploadAvatar } from "./live";
 import type {
   Activity,
+  Attachment,
   Board,
   Card,
   Client,
@@ -209,6 +210,14 @@ function useStoreValue() {
 
   const name = (d: Data, id: string) => d.users.find((u) => u.id === id)?.name.split(" ")[0] ?? "Someone";
 
+  const uploadFiles = async (boardId: string, cardId: string, files: File[]): Promise<Attachment[]> =>
+    LIVE
+      ? Promise.all(files.map((f) => uploadAttachment(boardId, cardId, f)))
+      : files.map((f) => {
+          const url = URL.createObjectURL(f);
+          return { id: uid("a"), name: f.name, size: fileSize(f.size), type: f.type || undefined, url, thumb: f.type.startsWith("image/") ? url : undefined };
+        });
+
   const actions = {
     switchUser: (id: string) => {
       if (!LIVE) setData((d) => ({ ...d, currentUserId: id }));
@@ -389,10 +398,10 @@ function useStoreValue() {
       });
     },
 
-    addRequest: (r: Omit<ClientRequest, "id" | "at" | "status" | "by">) =>
+    addRequest: (r: Omit<ClientRequest, "id" | "at" | "status" | "by">, extra: { cardId?: string; attachments?: Attachment[] } = {}) =>
       setData((d) => {
         const reqList = d.lists.find((l) => l.boardId === r.boardId && l.kind === "requests");
-        const cardId = uid("k");
+        const cardId = extra.cardId ?? uid("k");
         const board = d.boards.find((b) => b.id === r.boardId);
         const admins = d.users.filter((u) => u.role === "admin" || (board?.memberIds.includes(u.id) && u.teamIds.some((t) => d.teams.find((x) => x.id === t)?.name === "Sales"))).map((u) => u.id);
         const newCard: Card = {
@@ -412,7 +421,7 @@ function useStoreValue() {
           clientVisible: true,
           createdAt: now(),
           history: [{ at: now(), userId: d.currentUserId, text: "raised this as a client request" }],
-          attachments: [],
+          attachments: extra.attachments ?? [],
         };
         return {
           ...d,
@@ -461,6 +470,46 @@ function useStoreValue() {
       });
       return id;
     },
+    /** Upload files to a task. Live: private storage bucket; demo: in-browser previews. */
+    attachFiles: async (cardId: string, files: File[]) => {
+      const card = data.cards.find((c) => c.id === cardId);
+      if (!card || !files.length) return;
+      let added: Attachment[];
+      try {
+        added = await uploadFiles(card.boardId, cardId, files);
+      } catch (e) {
+        setNotice({ tone: "error", text: `Couldn't upload: ${e instanceof Error ? e.message : e}` });
+        return;
+      }
+      setData((d) => ({
+        ...d,
+        cards: patchCard(d, cardId, { attachments: [...(d.cards.find((c) => c.id === cardId)?.attachments ?? []), ...added] }, `attached ${added.map((a) => a.name).join(", ")}`),
+      }));
+    },
+    /** Upload files for a task that doesn't exist yet (client requests): returns what to attach. */
+    uploadFiles: (boardId: string, cardId: string, files: File[]) => uploadFiles(boardId, cardId, files),
+    removeAttachment: (cardId: string, attachmentId: string) => {
+      const a = data.cards.find((c) => c.id === cardId)?.attachments.find((x) => x.id === attachmentId);
+      if (!a) return;
+      setData((d) => ({ ...d, cards: patchCard(d, cardId, { attachments: (d.cards.find((c) => c.id === cardId)?.attachments ?? []).filter((x) => x.id !== attachmentId) }, `removed ${a.name}`) }));
+      if (LIVE && a.path) enqueue(() => deleteFile(a.path!));
+    },
+    /** A link that opens the file: a short-lived signed link when live. */
+    fileUrl: async (a: Attachment) => (LIVE && a.path ? attachmentUrl(a.path) : a.url ?? a.thumb ?? ""),
+
+    /** Your own name, title and photo. */
+    updateMe: (patch: Partial<Pick<User, "name" | "title" | "photo">>) =>
+      setData((d) => ({ ...d, users: d.users.map((x) => (x.id === d.currentUserId ? { ...x, ...patch } : x)) })),
+    uploadPhoto: async (file: File): Promise<string> => {
+      if (LIVE) return uploadAvatar(data.currentUserId, file);
+      return new Promise((ok, fail) => {
+        const r = new FileReader();
+        r.onload = () => ok(String(r.result));
+        r.onerror = () => fail(r.error);
+        r.readAsDataURL(file);
+      });
+    },
+
     updateBoard: (id: string, patch: Partial<Board>) => setData((d) => ({ ...d, boards: d.boards.map((b) => (b.id === id ? { ...b, ...patch } : b)) })),
 
     addList: (boardId: string, name: string) => setData((d) => ({ ...d, lists: [...d.lists, { id: uid("l"), boardId, name }] })),
