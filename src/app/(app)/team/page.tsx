@@ -24,7 +24,7 @@ export default function TeamPage() {
         </Button>
       </PageHeader>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+      <div className="grid gap-6 lg:grid-cols-[1fr_300px] [&>*]:min-w-0">
         <Panel
           title={`People (${people.length})`}
           action={

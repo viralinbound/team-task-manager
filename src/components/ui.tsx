@@ -239,7 +239,7 @@ export function Empty({ title, sub, children }: { title: string; sub?: string; c
 
 export function Panel({ title, action, children, className }: { title?: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={cn("rounded-2xl border border-line bg-surface", className)}>
+    <section className={cn("min-w-0 rounded-2xl border border-line bg-surface", className)}>
       {title && (
         <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
           <h2 className="text-sm font-semibold text-ink">{title}</h2>
