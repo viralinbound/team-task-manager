@@ -8,6 +8,7 @@ import { cn, dueState, shortDate } from "@/lib/format";
 import { AvatarStack, Button, Empty, Icon, inputCls, PageHeader, Progress } from "@/components/ui";
 import { AddProjectTile, ProjectCard } from "@/components/ProjectCard";
 import { useNewProject } from "@/components/NewProject";
+import { ImportTrello } from "@/components/ImportTrello";
 
 const STATUS: { key: "all" | NonNullable<Board["status"]>; label: string }[] = [
   { key: "all", label: "All" },
@@ -24,6 +25,7 @@ export default function ProjectsPage() {
   const [client, setClient] = useState("");
   const [status, setStatus] = useState<(typeof STATUS)[number]["key"]>("all");
   const [view, setView] = useState<"grid" | "list">("grid");
+  const [importing, setImporting] = useState(false);
   const canCreate = s.me.role !== "viewer";
 
   const list = visibleBoards.filter(
@@ -38,11 +40,17 @@ export default function ProjectsPage() {
     <div className="mx-auto max-w-7xl">
       <PageHeader title="Projects" sub={`${visibleBoards.length} projects · ${new Set(visibleBoards.filter((b) => b.clientId).map((b) => b.clientId)).size} clients · ${visibleBoards.filter((b) => !b.clientId).length} internal`}>
         {canCreate && (
+          <Button variant="outline" onClick={() => setImporting(true)}>
+            <Icon name="download" size={16} /> Import from Trello
+          </Button>
+        )}
+        {canCreate && (
           <Button onClick={() => newProject()}>
             <Icon name="plus" size={16} /> New project
           </Button>
         )}
       </PageHeader>
+      {importing && <ImportTrello onClose={() => setImporting(false)} />}
 
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <div className="relative w-full sm:w-64">

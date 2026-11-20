@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import type { Attachment, Card } from "@/lib/types";
 import { Icon } from "./ui";
+import { ProofViewer } from "./ProofViewer";
 
 const isImage = (a: Attachment) => (a.type ?? "").startsWith("image/") || /\.(png|jpe?g|gif|webp|avif)$/i.test(a.name);
 
@@ -34,6 +35,9 @@ export function Attachments({ card, canEdit }: { card: Card; canEdit: boolean })
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
+  const [proof, setProof] = useState<Attachment | null>(null);
+  const client = s.me.role === "client";
+  const openPins = (a: Attachment) => s.pins.filter((p) => p.attachmentId === a.id && p.cardId === card.id && !p.resolved && (!client || !p.internal)).length;
 
   const add = async (files: File[]) => {
     if (!files.length) return;
@@ -112,6 +116,16 @@ export function Attachments({ card, canEdit }: { card: Card; canEdit: boolean })
                   </span>
                 </span>
               </button>
+              {isImage(a) && (
+                <button
+                  type="button"
+                  onClick={() => setProof(a)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] font-semibold text-ink-soft hover:border-brand hover:text-brand"
+                  title="Open full size and pin feedback on the image"
+                >
+                  Review{openPins(a) > 0 && <span className="rounded-full bg-brand px-1.5 text-[10px] text-white">{openPins(a)}</span>}
+                </button>
+              )}
               {canEdit && (
                 <button
                   type="button"
@@ -126,6 +140,7 @@ export function Attachments({ card, canEdit }: { card: Card; canEdit: boolean })
           ))}
         </ul>
       )}
+      {proof && <ProofViewer card={card} attachment={proof} onClose={() => setProof(null)} />}
     </section>
   );
 }

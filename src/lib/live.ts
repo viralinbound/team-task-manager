@@ -1,5 +1,5 @@
 import { supabase } from "./supabase/client";
-import type { Activity, Attachment, Board, Card, Client, ClientRequest, Comment, Label, List, Notification, Team, TimeEntry, User } from "./types";
+import type { Activity, Attachment, Board, Card, Client, ClientRequest, Comment, Label, List, Notification, Pin, Team, TimeEntry, User } from "./types";
 import type { ProjectTemplate } from "./templates";
 
 /**
@@ -22,6 +22,7 @@ export interface LiveData {
   activity: Activity[];
   templates: ProjectTemplate[];
   timeEntries: TimeEntry[];
+  pins: Pin[];
   currentUserId: string;
 }
 
@@ -178,7 +179,7 @@ async function all(table: string, order?: string, asc = true) {
 }
 
 export async function loadAll(userId: string): Promise<LiveData> {
-  const [profiles, teams, clients, boards, stars, lists, cards, comments, labels, requests, notifications, templates, timeEntries, activity] = await Promise.all([
+  const [profiles, teams, clients, boards, stars, lists, cards, comments, labels, requests, notifications, templates, timeEntries, pins, activity] = await Promise.all([
     all("profiles", "created_at"),
     all("teams", "created_at"),
     all("clients", "created_at"),
@@ -192,6 +193,7 @@ export async function loadAll(userId: string): Promise<LiveData> {
     all("notifications", "created_at", false),
     all("project_templates", "created_at"),
     all("time_entries", "spent_on", false),
+    all("proof_pins", "created_at"),
     supabase()
       .from("activity")
       .select("*")
@@ -236,6 +238,19 @@ export async function loadAll(userId: string): Promise<LiveData> {
       note: (e.note as string) ?? "",
       spentOn: e.spent_on as string,
       at: e.created_at as string,
+    })),
+    pins: pins.map((p) => ({
+      id: p.id as string,
+      cardId: p.card_id as string,
+      boardId: p.board_id as string,
+      attachmentId: p.attachment_id as string,
+      x: p.x as number,
+      y: p.y as number,
+      text: p.text as string,
+      internal: p.internal as boolean,
+      resolved: p.resolved as boolean,
+      userId: p.user_id as string,
+      at: p.created_at as string,
     })),
     currentUserId: userId,
   };
@@ -321,6 +336,15 @@ export async function pushChanges(before: LiveData, after: LiveData, role: User[
 
   const ac = changes(before.activity, after.activity);
   if (ac.added.length) await check(sb.from("activity").insert(ac.added.map(toRow.activity)), "log");
+
+  const pn = changes(before.pins, after.pins);
+  if (pn.added.length)
+    await check(
+      sb.from("proof_pins").insert(pn.added.map((p) => ({ id: p.id, card_id: p.cardId, board_id: p.boardId, attachment_id: p.attachmentId, x: p.x, y: p.y, text: p.text, internal: p.internal, user_id: me }))),
+      "add pin",
+    );
+  for (const p of pn.updated) await check(sb.from("proof_pins").update({ resolved: p.resolved }).eq("id", p.id), "resolve pin");
+  if (pn.removed.length) await check(sb.from("proof_pins").delete().in("id", pn.removed.map((p) => p.id)), "remove pin");
 
   if (isStaff) {
     const tp = changes(before.templates, after.templates);

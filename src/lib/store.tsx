@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as seed from "./seed";
 import { TEMPLATES, type ProjectTemplate, type TemplateCard } from "./templates";
+import type { TrelloImport } from "./trello";
 import { LIVE, supabase } from "./supabase/client";
 import { attachmentUrl, clientReview, fileSize, loadAll, pushChanges, removeAttachment as deleteFile, saveInvite, uploadAttachment, uploadAvatar } from "./live";
 import type {
@@ -13,6 +14,7 @@ import type {
   ChecklistItem,
   FieldDef,
   FieldValue,
+  Pin,
   TimeEntry,
   Client,
   ClientRequest,
@@ -45,6 +47,7 @@ interface Data {
   activity: Activity[];
   templates: ProjectTemplate[];
   timeEntries: TimeEntry[];
+  pins: Pin[];
   currentUserId: string;
 }
 
@@ -57,7 +60,7 @@ const uid = (_prefix: string) =>
     ? crypto.randomUUID()
     : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (ch) => (+ch ^ (Math.random() * 16) >> (+ch / 4)).toString(16));
 
-const EMPTY: Data = { users: [], teams: [], clients: [], boards: [], lists: [], cards: [], labels: [], requests: [], notifications: [], activity: [], templates: [], timeEntries: [], currentUserId: "" };
+const EMPTY: Data = { users: [], teams: [], clients: [], boards: [], lists: [], cards: [], labels: [], requests: [], notifications: [], activity: [], templates: [], timeEntries: [], pins: [], currentUserId: "" };
 const NOBODY: User = { id: "", name: "", email: "", role: "viewer", title: "", teamIds: [], color: "#1f6f5c" };
 
 const DAY_MS = 86_400_000;
@@ -133,6 +136,7 @@ const initial = (): Data => (LIVE ? EMPTY : {
   activity: seed.activity,
   templates: [],
   timeEntries: [],
+  pins: [],
   currentUserId: "u-admin",
 });
 
@@ -565,6 +569,58 @@ function useStoreValue() {
       return id;
     },
 
+    /**
+     * Create a project from a Trello export. Cards come in unassigned and hidden from the client
+     * (safer: old Trello boards often hold internal notes); old Trello comments become internal comments.
+     */
+    importTrello: (tr: TrelloImport, opts: { name: string; clientId?: string; memberIds: string[] }) => {
+      const id = uid("b");
+      const lists: List[] = tr.lists.map((l) => ({ id: uid("l"), boardId: id, name: l.name, kind: l.kind }));
+      if (!lists.some((l) => l.kind === "done")) lists.push({ id: uid("l"), boardId: id, name: "Done", kind: "done" });
+      setData((d) => {
+        const labels = [...d.labels];
+        const labelId = (name: string) => {
+          const hit = labels.find((l) => l.name.toLowerCase() === name.toLowerCase());
+          if (hit) return hit.id;
+          const src = tr.labels.find((l) => l.name.toLowerCase() === name.toLowerCase());
+          const nl = { id: uid("lb"), name: name.slice(0, 40), color: src?.color ?? "#6d5bd0" };
+          labels.push(nl);
+          return nl.id;
+        };
+        const fmt = (iso: string) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "");
+        const cards: Card[] = tr.cards.map((c, i) => ({
+          id: uid("k"),
+          boardId: id,
+          listId: lists[c.list].id,
+          order: i,
+          title: c.title,
+          description: c.description,
+          assigneeIds: [],
+          assignedBy: d.currentUserId,
+          priority: c.priority,
+          due: c.due,
+          labels: c.labels.map(labelId),
+          checklist: c.checklist.map((x) => ({ id: uid("x"), text: x.text, done: x.done })),
+          comments: c.comments.map((m) => ({ id: uid("m"), userId: d.currentUserId, text: `From Trello · ${m.author}${m.at ? `, ${fmt(m.at)}` : ""}:
+${m.text}`.slice(0, 10000), internal: true, at: m.at || now() })),
+          clientVisible: false,
+          createdAt: now(),
+          history: [{ at: now(), userId: d.currentUserId, text: "imported from Trello" }],
+          attachments: [],
+        }));
+        return {
+          ...d,
+          labels,
+          boards: [...d.boards, { id, name: opts.name, clientId: opts.clientId, color: "#1f6f5c", memberIds: opts.memberIds, cover: `https://picsum.photos/seed/cover-${id}/640/260`, status: "active", description: tr.description || undefined, fields: [] }],
+          lists: [...d.lists, ...lists],
+          cards: [...d.cards, ...cards],
+          notifications: notify(d, opts.memberIds, `${name(d, d.currentUserId)} added you to the project “${opts.name}”`, `/boards/${id}`, "team"),
+          activity: log(d, `imported “${opts.name}” from Trello (${cards.length} cards)`, id),
+        };
+      });
+      return id;
+    },
+
     /** Snapshot a project (columns, open tasks, subtasks, labels, fields) as a reusable template. */
     saveTemplate: (boardId: string, tplName: string, blurb: string) => {
       const id = uid("tp");
@@ -631,6 +687,24 @@ function useStoreValue() {
         };
         return { ...d, timeEntries: [entry, ...d.timeEntries] };
       }),
+    /** Design proofing: a comment pinned to a spot on an image. */
+    addPin: (cardId: string, attachmentId: string, x: number, y: number, text: string, internal: boolean) =>
+      setData((d) => {
+        const c = d.cards.find((k) => k.id === cardId);
+        if (!c || !text.trim()) return d;
+        const pin: Pin = { id: uid("p"), cardId, boardId: c.boardId, attachmentId, x, y, text: text.trim().slice(0, 2000), internal, resolved: false, userId: d.currentUserId, at: now() };
+        const me = d.users.find((u) => u.id === d.currentUserId);
+        // the team hears about every new pin; a client's pin also reaches admins
+        const to = me?.role === "client" ? Array.from(new Set([...c.assigneeIds, ...d.users.filter((u) => u.role === "admin").map((u) => u.id)])) : c.assigneeIds;
+        return {
+          ...d,
+          pins: [...d.pins, pin],
+          notifications: notify(d, to, `${name(d, d.currentUserId)} left design feedback on “${c.title}”`, `/boards/${c.boardId}?card=${cardId}`, "comment"),
+        };
+      }),
+    togglePin: (id: string) => setData((d) => ({ ...d, pins: d.pins.map((p) => (p.id === id ? { ...p, resolved: !p.resolved } : p)) })),
+    removePin: (id: string) => setData((d) => ({ ...d, pins: d.pins.filter((p) => p.id !== id) })),
+
     removeTime: (id: string) => setData((d) => ({ ...d, timeEntries: d.timeEntries.filter((e) => e.id !== id) })),
 
     /** Upload files to a task. Live: private storage bucket; demo: in-browser previews. */

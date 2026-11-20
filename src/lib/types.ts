@@ -81,6 +81,21 @@ export interface FieldDef {
 }
 export type FieldValue = string | number | boolean;
 
+/** A proofing comment pinned to a spot on an image attachment (x, y are 0..1). */
+export interface Pin {
+  id: string;
+  cardId: string;
+  boardId: string;
+  attachmentId: string;
+  x: number;
+  y: number;
+  text: string;
+  internal: boolean;
+  resolved: boolean;
+  userId: string;
+  at: string;
+}
+
 /** Time someone spent on a task (internal; never shown to clients). */
 export interface TimeEntry {
   id: string;
