@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { nextDue, useHelpers, useStore } from "@/lib/store";
 import { Attachments } from "./Attachments";
+import { CustomFields, TimeTracker } from "./TaskExtras";
 import type { Card, Priority } from "@/lib/types";
 import { cn, PRIORITY, timeAgo } from "@/lib/format";
 import { Avatar, Button, DueChip, Icon, inputCls, Modal, PriorityPill, Progress } from "./ui";
@@ -211,7 +212,11 @@ export function CardModal({ cardId, onClose, client }: { cardId: string | null; 
             </section>
           )}
 
+          <CustomFields card={card} canEdit={canEdit} />
+
           <Attachments card={card} canEdit={canEdit} />
+
+          {!client && (s.me.role === "admin" || s.me.role === "member") && <TimeTracker card={card} />}
 
           <section>
             <div className="mb-3 flex gap-1 border-b border-line">

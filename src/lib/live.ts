@@ -1,5 +1,6 @@
 import { supabase } from "./supabase/client";
-import type { Activity, Attachment, Board, Card, Client, ClientRequest, Comment, Label, List, Notification, Team, User } from "./types";
+import type { Activity, Attachment, Board, Card, Client, ClientRequest, Comment, Label, List, Notification, Team, TimeEntry, User } from "./types";
+import type { ProjectTemplate } from "./templates";
 
 /**
  * The bridge between the app's in-memory data and the database.
@@ -19,6 +20,8 @@ export interface LiveData {
   requests: ClientRequest[];
   notifications: Notification[];
   activity: Activity[];
+  templates: ProjectTemplate[];
+  timeEntries: TimeEntry[];
   currentUserId: string;
 }
 
@@ -62,6 +65,7 @@ const fromBoard = (r: Row, stars: Set<string>): Board => ({
   startDate: u(r.start_date as string),
   dueDate: u(r.due_date as string),
   status: r.status as Board["status"],
+  fields: (r.fields as Board["fields"]) ?? [],
 });
 const fromList = (r: Row): List => ({ id: r.id as string, boardId: r.board_id as string, name: r.name as string, kind: u(r.kind as List["kind"]) });
 const fromCard = (r: Row, comments: Comment[]): Card => ({
@@ -87,6 +91,7 @@ const fromCard = (r: Row, comments: Comment[]): Card => ({
   attachments: (r.attachments as Card["attachments"]) ?? [],
   cover: u(r.cover as string),
   repeat: u(r.repeat as Card["repeat"]),
+  custom: (r.custom as Card["custom"]) ?? {},
 });
 const fromComment = (r: Row): Comment => ({ id: r.id as string, userId: r.user_id as string, text: r.text as string, internal: r.internal as boolean, at: r.created_at as string });
 const fromRequest = (r: Row): ClientRequest => ({
@@ -129,6 +134,7 @@ const toRow = {
     start_date: n(b.startDate),
     due_date: n(b.dueDate),
     status: b.status ?? "active",
+    fields: b.fields ?? [],
   }),
   lists: (l: List, position: number) => ({ id: l.id, board_id: l.boardId, name: l.name, kind: n(l.kind), position }),
   cards: (c: Card) => ({
@@ -152,10 +158,13 @@ const toRow = {
     archived: !!c.archived,
     cover: n(c.cover),
     repeat: n(c.repeat),
+    custom: c.custom ?? {},
   }),
   requests: (r: ClientRequest) => ({ id: r.id, client_id: r.clientId, board_id: r.boardId, title: r.title, description: r.description, priority: r.priority, wanted_by: n(r.wantedBy), status: r.status }),
   notifications: (x: Notification) => ({ id: x.id, user_id: x.userId, text: x.text, href: x.href, kind: x.kind, read: x.read }),
   activity: (a: Activity) => ({ id: a.id, text: a.text, board_id: n(a.boardId) }),
+  templates: (t: ProjectTemplate) => ({ id: t.id, name: t.name, blurb: t.blurb, lists: t.lists, cards: t.cards ?? [], fields: t.fields ?? [] }),
+  timeEntries: (e: TimeEntry) => ({ id: e.id, card_id: e.cardId, board_id: e.boardId, minutes: e.minutes, note: e.note, spent_on: e.spentOn }),
   profiles: (p: User) => ({ name: p.name, title: p.title, photo: n(p.photo), color: p.color, email_alerts: p.emailAlerts !== false, email_digest: p.emailDigest !== false }),
 };
 
@@ -169,7 +178,7 @@ async function all(table: string, order?: string, asc = true) {
 }
 
 export async function loadAll(userId: string): Promise<LiveData> {
-  const [profiles, teams, clients, boards, stars, lists, cards, comments, labels, requests, notifications, activity] = await Promise.all([
+  const [profiles, teams, clients, boards, stars, lists, cards, comments, labels, requests, notifications, templates, timeEntries, activity] = await Promise.all([
     all("profiles", "created_at"),
     all("teams", "created_at"),
     all("clients", "created_at"),
@@ -181,6 +190,8 @@ export async function loadAll(userId: string): Promise<LiveData> {
     all("labels", "name"),
     all("client_requests", "created_at", false),
     all("notifications", "created_at", false),
+    all("project_templates", "created_at"),
+    all("time_entries", "spent_on", false),
     supabase()
       .from("activity")
       .select("*")
@@ -205,6 +216,27 @@ export async function loadAll(userId: string): Promise<LiveData> {
     requests: requests.map(fromRequest),
     notifications: notifications.map(fromNotification),
     activity: activity.map(fromActivity),
+    templates: templates.map((t) => ({
+      id: t.id as string,
+      name: t.name as string,
+      blurb: (t.blurb as string) || "Saved from a project",
+      lists: (t.lists as ProjectTemplate["lists"]) ?? [],
+      starter: [],
+      cards: (t.cards as ProjectTemplate["cards"]) ?? [],
+      fields: (t.fields as ProjectTemplate["fields"]) ?? [],
+      saved: true,
+      createdBy: u(t.created_by as string),
+    })),
+    timeEntries: timeEntries.map((e) => ({
+      id: e.id as string,
+      cardId: e.card_id as string,
+      boardId: e.board_id as string,
+      userId: e.user_id as string,
+      minutes: e.minutes as number,
+      note: (e.note as string) ?? "",
+      spentOn: e.spent_on as string,
+      at: e.created_at as string,
+    })),
     currentUserId: userId,
   };
 }
@@ -215,12 +247,14 @@ function changes<T extends Keyed>(before: T[], after: T[], strip?: (x: T) => unk
   const prev = new Map(before.map((x) => [x.id, x]));
   const added: T[] = [];
   const updated: T[] = [];
+  const nowIds = new Set(after.map((x) => x.id));
+  const removed = before.filter((x) => !nowIds.has(x.id));
   for (const x of after) {
     const p = prev.get(x.id);
     if (!p) added.push(x);
     else if (p !== x && JSON.stringify(strip ? strip(p) : p) !== JSON.stringify(strip ? strip(x) : x)) updated.push(x);
   }
-  return { added, updated };
+  return { added, updated, removed };
 }
 
 async function check<T>(p: PromiseLike<{ error: { message: string } | null; data?: T }>, what: string) {
@@ -287,6 +321,17 @@ export async function pushChanges(before: LiveData, after: LiveData, role: User[
 
   const ac = changes(before.activity, after.activity);
   if (ac.added.length) await check(sb.from("activity").insert(ac.added.map(toRow.activity)), "log");
+
+  if (isStaff) {
+    const tp = changes(before.templates, after.templates);
+    if (tp.added.length) await check(sb.from("project_templates").insert(tp.added.map(toRow.templates)), "save template");
+    for (const x of tp.updated) await check(sb.from("project_templates").update(toRow.templates(x)).eq("id", x.id), "update template");
+    if (tp.removed.length) await check(sb.from("project_templates").delete().in("id", tp.removed.map((x) => x.id)), "delete template");
+
+    const te = changes(before.timeEntries, after.timeEntries);
+    if (te.added.length) await check(sb.from("time_entries").insert(te.added.map(toRow.timeEntries)), "log time");
+    if (te.removed.length) await check(sb.from("time_entries").delete().in("id", te.removed.map((x) => x.id)), "remove time");
+  }
 }
 
 /** Clients approve or send back work through a checked database function, not a direct edit. */

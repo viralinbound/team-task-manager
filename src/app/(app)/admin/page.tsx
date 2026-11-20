@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useHelpers, useStore } from "@/lib/store";
 import { cn, daysUntil, dueState, timeAgo } from "@/lib/format";
 import { Avatar, Button, Chip, Icon, PageHeader, Panel, Progress } from "@/components/ui";
+import { hm } from "@/components/TaskExtras";
 
 export default function AdminDashboard() {
   const s = useStore();
@@ -30,6 +31,22 @@ export default function AdminDashboard() {
     })
     .sort((a, b) => b.open - a.open);
   const maxLoad = Math.max(4, ...load.map((l) => l.open));
+
+  // time logged since Monday
+  const monday = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d.toLocaleDateString("en-CA");
+  })();
+  const week = s.timeEntries.filter((e) => e.spentOn >= monday && (!client || boardById(e.boardId)?.clientId === client));
+  const sumBy = (key: (e: (typeof week)[number]) => string) => {
+    const m = new Map<string, number>();
+    week.forEach((e) => m.set(key(e), (m.get(key(e)) ?? 0) + e.minutes));
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  };
+  const timeByPerson = sumBy((e) => e.userId);
+  const timeByProject = sumBy((e) => e.boardId);
+  const weekTotal = week.reduce((n, e) => n + e.minutes, 0);
 
   const exportCsv = () => {
     const rows = [["Task", "Project", "Client", "Assignees", "Team", "Status", "Priority", "Due"]];
@@ -240,6 +257,33 @@ export default function AdminDashboard() {
                 );
               })}
             </ul>
+          </Panel>
+
+          <Panel title="Time logged this week" action={<span className="text-xs font-semibold text-muted">{hm(weekTotal)} total</span>}>
+            {week.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-muted">No time logged since Monday. People log time from the Time section inside any task.</p>
+            ) : (
+              <div className="grid gap-px bg-line sm:grid-cols-2">
+                {(
+                  [
+                    ["By person", timeByPerson.map(([id, m]) => [userById(id)?.name ?? "Former member", m] as const)],
+                    ["By project", timeByProject.map(([id, m]) => [boardById(id)?.name ?? "Removed project", m] as const)],
+                  ] as const
+                ).map(([title, rows]) => (
+                  <div key={title} className="bg-surface px-5 py-3">
+                    <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-faint uppercase">{title}</p>
+                    <ul className="space-y-1.5">
+                      {rows.slice(0, 6).map(([label, m]) => (
+                        <li key={label} className="flex items-center gap-2 text-sm">
+                          <span className="min-w-0 flex-1 truncate">{label}</span>
+                          <span className="font-semibold">{hm(m)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
           </Panel>
 
           {/* Activity */}

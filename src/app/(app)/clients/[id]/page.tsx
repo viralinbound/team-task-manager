@@ -46,6 +46,11 @@ export default function ClientDetail() {
             {c.industry} · <span className="capitalize">{c.status}</span>
           </p>
         </div>
+        <Link href={`/clients/${c.id}/report`}>
+          <Button variant="outline">
+            <Icon name="chart" size={16} /> Weekly report
+          </Button>
+        </Link>
         <Button variant="outline" onClick={() => setInviting(true)}>
           <Icon name="plus" size={16} /> Invite to portal
         </Button>

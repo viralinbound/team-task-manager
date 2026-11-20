@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as seed from "./seed";
-import { TEMPLATES } from "./templates";
+import { TEMPLATES, type ProjectTemplate, type TemplateCard } from "./templates";
 import { LIVE, supabase } from "./supabase/client";
 import { attachmentUrl, clientReview, fileSize, loadAll, pushChanges, removeAttachment as deleteFile, saveInvite, uploadAttachment, uploadAvatar } from "./live";
 import type {
@@ -11,6 +11,9 @@ import type {
   Board,
   Card,
   ChecklistItem,
+  FieldDef,
+  FieldValue,
+  TimeEntry,
   Client,
   ClientRequest,
   Label,
@@ -40,6 +43,8 @@ interface Data {
   requests: ClientRequest[];
   notifications: Notification[];
   activity: Activity[];
+  templates: ProjectTemplate[];
+  timeEntries: TimeEntry[];
   currentUserId: string;
 }
 
@@ -52,7 +57,7 @@ const uid = (_prefix: string) =>
     ? crypto.randomUUID()
     : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (ch) => (+ch ^ (Math.random() * 16) >> (+ch / 4)).toString(16));
 
-const EMPTY: Data = { users: [], teams: [], clients: [], boards: [], lists: [], cards: [], labels: [], requests: [], notifications: [], activity: [], currentUserId: "" };
+const EMPTY: Data = { users: [], teams: [], clients: [], boards: [], lists: [], cards: [], labels: [], requests: [], notifications: [], activity: [], templates: [], timeEntries: [], currentUserId: "" };
 const NOBODY: User = { id: "", name: "", email: "", role: "viewer", title: "", teamIds: [], color: "#1f6f5c" };
 
 const DAY_MS = 86_400_000;
@@ -126,6 +131,8 @@ const initial = (): Data => (LIVE ? EMPTY : {
   requests: seed.requests,
   notifications: seed.notifications,
   activity: seed.activity,
+  templates: [],
+  timeEntries: [],
   currentUserId: "u-admin",
 });
 
@@ -184,7 +191,7 @@ function useStoreValue() {
     }
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) setData(JSON.parse(raw));
+      if (raw) setData({ ...initial(), ...JSON.parse(raw) }); // older saved demos lack newer collections
     } catch {
       /* storage blocked: run on seed data */
     }
@@ -522,30 +529,33 @@ function useStoreValue() {
     /** Create a project from a template: its lists, plus any starter cards. */
     addBoard: (b: Omit<Board, "id">, templateId = b.clientId ? "client" : "blank") => {
       const id = uid("b");
-      const tpl = TEMPLATES.find((t) => t.id === templateId) ?? TEMPLATES[0];
+      const tpl = TEMPLATES.find((x) => x.id === templateId) ?? data.templates.find((x) => x.id === templateId) ?? TEMPLATES[0];
       const lists: List[] = tpl.lists.map((l) => ({ id: uid("l"), boardId: id, name: l.name, kind: l.kind }));
+      const specs: TemplateCard[] = [...tpl.starter.map(([list, title]) => ({ list, title })), ...(tpl.cards ?? [])];
       setData((d) => {
-        const starter: Card[] = tpl.starter.map(([li, title], i) => ({
+        const labelIds = new Set(d.labels.map((l) => l.id));
+        const starter: Card[] = specs.map((sp, i) => ({
           id: uid("k"),
           boardId: id,
-          listId: lists[li].id,
+          listId: (lists[sp.list] ?? lists[0]).id,
           order: i,
-          title,
-          description: "",
+          title: sp.title,
+          description: sp.description ?? "",
           assigneeIds: [],
           assignedBy: d.currentUserId,
-          priority: "medium",
-          labels: [],
-          checklist: [],
+          priority: sp.priority ?? "medium",
+          labels: (sp.labels ?? []).filter((l) => labelIds.has(l)),
+          checklist: (sp.checklist ?? []).map((text) => ({ id: uid("x"), text, done: false })),
           comments: [],
-          clientVisible: !!b.clientId,
+          clientVisible: sp.clientVisible ?? !!b.clientId,
           createdAt: now(),
           history: [{ at: now(), userId: d.currentUserId, text: `added from the ${tpl.name} template` }],
           attachments: [],
+          custom: sp.custom ?? {},
         }));
         return {
           ...d,
-          boards: [...d.boards, { cover: `https://picsum.photos/seed/cover-${id}/640/260`, status: "active", ...b, id }],
+          boards: [...d.boards, { cover: `https://picsum.photos/seed/cover-${id}/640/260`, status: "active", fields: tpl.fields ?? [], ...b, id }],
           lists: [...d.lists, ...lists],
           cards: [...d.cards, ...starter],
           notifications: notify(d, b.memberIds, `${name(d, d.currentUserId)} added you to the project “${b.name}”`, `/boards/${id}`, "team"),
@@ -554,6 +564,75 @@ function useStoreValue() {
       });
       return id;
     },
+
+    /** Snapshot a project (columns, open tasks, subtasks, labels, fields) as a reusable template. */
+    saveTemplate: (boardId: string, tplName: string, blurb: string) => {
+      const id = uid("tp");
+      setData((d) => {
+        const board = d.boards.find((x) => x.id === boardId);
+        const lists = d.lists.filter((l) => l.boardId === boardId);
+        const cards: TemplateCard[] = d.cards
+          .filter((c) => c.boardId === boardId && !c.archived && lists.find((l) => l.id === c.listId)?.kind !== "done")
+          .sort((a, c) => lists.findIndex((l) => l.id === a.listId) - lists.findIndex((l) => l.id === c.listId) || a.order - c.order)
+          .map((c) => ({
+            list: lists.findIndex((l) => l.id === c.listId),
+            title: c.title,
+            description: c.description || undefined,
+            priority: c.priority,
+            labels: c.labels,
+            checklist: c.checklist.map((i) => i.text),
+            clientVisible: c.clientVisible,
+          }));
+        const tpl: ProjectTemplate = {
+          id,
+          name: tplName,
+          blurb: blurb || `From “${board?.name}”: ${lists.length} columns, ${cards.length} tasks`,
+          lists: lists.map((l) => ({ name: l.name, kind: l.kind })),
+          starter: [],
+          cards,
+          fields: board?.fields ?? [],
+          saved: true,
+          createdBy: d.currentUserId,
+        };
+        return { ...d, templates: [...d.templates, tpl], activity: log(d, `saved “${board?.name}” as the template “${tplName}”`, boardId) };
+      });
+      return id;
+    },
+    deleteTemplate: (id: string) => setData((d) => ({ ...d, templates: d.templates.filter((x) => x.id !== id) })),
+
+    /** Custom fields: definitions on the project, values on each task. */
+    setFields: (boardId: string, fields: FieldDef[]) => setData((d) => ({ ...d, boards: d.boards.map((x) => (x.id === boardId ? { ...x, fields } : x)) })),
+    setCustom: (cardId: string, fieldId: string, value: FieldValue | undefined) =>
+      setData((d) => ({
+        ...d,
+        cards: d.cards.map((c) => {
+          if (c.id !== cardId) return c;
+          const custom = { ...(c.custom ?? {}) };
+          if (value === undefined || value === "") delete custom[fieldId];
+          else custom[fieldId] = value;
+          return { ...c, custom };
+        }),
+      })),
+
+    /** Time tracking (internal). */
+    logTime: (cardId: string, minutes: number, note = "", spentOn?: string) =>
+      setData((d) => {
+        const c = d.cards.find((x) => x.id === cardId);
+        if (!c || minutes < 1) return d;
+        const entry: TimeEntry = {
+          id: uid("te"),
+          cardId,
+          boardId: c.boardId,
+          userId: d.currentUserId,
+          minutes: Math.min(Math.round(minutes), 1440),
+          note: note.slice(0, 500),
+          spentOn: spentOn ?? new Date().toLocaleDateString("en-CA"),
+          at: now(),
+        };
+        return { ...d, timeEntries: [entry, ...d.timeEntries] };
+      }),
+    removeTime: (id: string) => setData((d) => ({ ...d, timeEntries: d.timeEntries.filter((e) => e.id !== id) })),
+
     /** Upload files to a task. Live: private storage bucket; demo: in-browser previews. */
     attachFiles: async (cardId: string, files: File[]) => {
       const card = data.cards.find((c) => c.id === cardId);

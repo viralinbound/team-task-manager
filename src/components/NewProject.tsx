@@ -36,7 +36,9 @@ function NewProjectForm({ initialClient, onClose }: { initialClient?: string; on
   const [cover, setCover] = useState(COVER_CHOICES[0]);
   const [members, setMembers] = useState<string[]>([s.me.id]);
   const staff = s.users.filter((u) => u.role === "admin" || u.role === "member");
-  const tpl = TEMPLATES.find((t) => t.id === template)!;
+  const all = [...TEMPLATES, ...s.templates];
+  const tpl = all.find((t) => t.id === template) ?? TEMPLATES[0];
+  const tasksIn = (t: (typeof all)[number]) => t.starter.length + (t.cards?.length ?? 0);
 
   const submit = () => {
     if (!name.trim()) return;
@@ -80,19 +82,34 @@ function NewProjectForm({ initialClient, onClose }: { initialClient?: string; on
           <div>
             <p className="mb-2 text-xs font-semibold text-ink-soft">Start from</p>
             <div className="grid gap-2 sm:grid-cols-3">
-              {TEMPLATES.map((t) => (
-                <button
-                  type="button"
-                  key={t.id}
-                  onClick={() => setTemplate(t.id)}
-                  className={cn("rounded-xl border p-3 text-left transition-colors", template === t.id ? "border-brand bg-brand-soft/60 ring-1 ring-brand" : "border-line hover:border-line-strong")}
-                >
-                  <span className="flex items-center justify-between">
-                    <span className="text-sm font-semibold">{t.name}</span>
-                    {template === t.id && <Icon name="check" size={16} className="text-brand" />}
-                  </span>
-                  <span className="mt-1 block text-xs leading-snug text-muted">{t.blurb}</span>
-                </button>
+              {all.map((t) => (
+                <div key={t.id} className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => setTemplate(t.id)}
+                    className={cn("h-full w-full rounded-xl border p-3 text-left transition-colors", template === t.id ? "border-brand bg-brand-soft/60 ring-1 ring-brand" : "border-line hover:border-line-strong")}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-semibold">{t.name}</span>
+                      {template === t.id ? <Icon name="check" size={16} className="shrink-0 text-brand" /> : t.saved && <span className="shrink-0 rounded bg-sunken px-1.5 py-px text-[10px] font-semibold text-muted">Saved</span>}
+                    </span>
+                    <span className="mt-1 block text-xs leading-snug text-muted">{t.blurb}</span>
+                  </button>
+                  {t.saved && (s.me.role === "admin" || t.createdBy === s.me.id) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!confirm(`Delete the template “${t.name}”? Projects already made from it stay as they are.`)) return;
+                        if (template === t.id) setTemplate("blank");
+                        s.deleteTemplate(t.id);
+                      }}
+                      className="absolute right-1.5 bottom-1.5 rounded p-1 text-faint opacity-0 group-hover:opacity-100 hover:bg-sunken hover:text-urgent focus:opacity-100"
+                      aria-label={`Delete template ${t.name}`}
+                    >
+                      <Icon name="x" size={13} />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
@@ -102,7 +119,8 @@ function NewProjectForm({ initialClient, onClose }: { initialClient?: string; on
                   {l.name}
                 </span>
               ))}
-              {tpl.starter.length > 0 && <span className="ml-1">+ {tpl.starter.length} starter tasks</span>}
+              {tasksIn(tpl) > 0 && <span className="ml-1">+ {tasksIn(tpl)} starter tasks</span>}
+              {(tpl.fields?.length ?? 0) > 0 && <span className="ml-1">· {tpl.fields!.length} custom fields</span>}
             </div>
           </div>
 

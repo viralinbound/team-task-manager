@@ -10,6 +10,7 @@ import { Kanban } from "@/components/Kanban";
 import { CardModal } from "@/components/CardModal";
 import { TableView } from "@/components/TableView";
 import { CalendarView } from "@/components/CalendarView";
+import { ProjectTools } from "@/components/ProjectTools";
 import { Avatar, AvatarStack, Empty, Icon } from "@/components/ui";
 
 export default function BoardPage() {
@@ -158,6 +159,7 @@ function BoardInner() {
               {requests.length} new client request{requests.length > 1 ? "s" : ""}
             </span>
           )}
+          {(s.me.role === "admin" || s.me.role === "member") && <ProjectTools board={board} />}
           <FilterBtn on={showArchive} onClick={() => setShowArchive((v) => !v)}>
             <Icon name="archive" size={14} /> Archive ({archived.length})
           </FilterBtn>
@@ -185,7 +187,7 @@ function BoardInner() {
       )}
 
       {view === "board" && <Kanban boardId={board.id} onOpen={open} dim={filtering ? dim : undefined} />}
-      {view === "table" && <TableView cards={visibleCards} onOpen={open} canEdit={s.me.role !== "viewer"} />}
+      {view === "table" && <TableView cards={visibleCards} onOpen={open} canEdit={s.me.role !== "viewer"} boardId={board.id} />}
       {view === "calendar" && <CalendarView cards={visibleCards} onOpen={open} />}
       <CardModal cardId={openId} onClose={() => open(null)} />
     </div>

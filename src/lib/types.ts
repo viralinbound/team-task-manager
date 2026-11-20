@@ -47,6 +47,8 @@ export interface Board {
   startDate?: string;
   dueDate?: string;
   status?: "active" | "on-hold" | "completed";
+  /** Custom fields this project adds to every task. */
+  fields?: FieldDef[];
 }
 
 export interface List {
@@ -67,6 +69,30 @@ export interface ChecklistItem {
 }
 
 export type Repeat = "daily" | "weekly" | "monthly";
+
+/** A project's own extra field, e.g. "Budget", "Platform", "Go-live date". */
+export type FieldType = "text" | "number" | "date" | "select" | "checkbox";
+export interface FieldDef {
+  id: string;
+  name: string;
+  type: FieldType;
+  /** choices for "select" */
+  options?: string[];
+}
+export type FieldValue = string | number | boolean;
+
+/** Time someone spent on a task (internal; never shown to clients). */
+export interface TimeEntry {
+  id: string;
+  cardId: string;
+  boardId: string;
+  userId: string;
+  minutes: number;
+  note: string;
+  /** YYYY-MM-DD */
+  spentOn: string;
+  at: string;
+}
 
 export interface Comment {
   id: string;
@@ -106,6 +132,8 @@ export interface Card {
   cover?: string;
   /** Re-create this task with the next due date when it is marked done. */
   repeat?: Repeat;
+  /** Custom field values keyed by FieldDef.id. */
+  custom?: Record<string, FieldValue>;
 }
 
 /** A file on a task. Live: `path` points into the private "attachments" bucket. Demo: `url` is a local preview. */

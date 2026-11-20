@@ -1,4 +1,4 @@
-import type { List } from "./types";
+import type { FieldDef, FieldValue, List, Priority } from "./types";
 
 type ListSpec = { name: string; kind?: List["kind"] };
 
@@ -9,6 +9,22 @@ export interface ProjectTemplate {
   lists: ListSpec[];
   /** starter cards: [list index, title] */
   starter: [number, string][];
+  /** Saved templates: full task snapshots and the project's custom fields. */
+  cards?: TemplateCard[];
+  fields?: FieldDef[];
+  saved?: boolean;
+  createdBy?: string;
+}
+
+export interface TemplateCard {
+  list: number;
+  title: string;
+  description?: string;
+  priority?: Priority;
+  labels?: string[];
+  checklist?: string[];
+  custom?: Record<string, FieldValue>;
+  clientVisible?: boolean;
 }
 
 const clientFlow: ListSpec[] = [

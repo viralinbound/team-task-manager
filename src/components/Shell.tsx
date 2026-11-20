@@ -23,6 +23,7 @@ const adminNav = [
 const clientNav = [
   { href: "/portal", label: "My projects", icon: "home" },
   { href: "/portal/request", label: "New request", icon: "plus" },
+  { href: "/portal/report", label: "Weekly report", icon: "chart" },
   { href: "/notifications", label: "Notifications", icon: "bell" },
 ];
 
@@ -149,8 +150,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="min-h-dvh lg:pl-64">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-line bg-canvas lg:block">{sidebar}</aside>
+    <div className="min-h-dvh lg:pl-64 print:pl-0">
+      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-line bg-canvas lg:block print:hidden">{sidebar}</aside>
 
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setOpen(false)}>
@@ -161,7 +162,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur sm:px-6">
+      <header className="sticky top-0 z-30 flex h-14 print:hidden items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur sm:px-6">
         <button className="focus-ring -ml-1 rounded-md p-1.5 text-ink-soft lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
           <Icon name="menu" />
         </button>
@@ -194,7 +195,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <main className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+      <main className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8 print:p-0">{children}</main>
     </div>
   );
 }

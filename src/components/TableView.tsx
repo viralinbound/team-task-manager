@@ -5,15 +5,23 @@ import { useHelpers, useStore } from "@/lib/store";
 import type { Card, Priority } from "@/lib/types";
 import { cn, PRIORITY } from "@/lib/format";
 import { AvatarStack, DueChip, Icon, PriorityPill } from "./ui";
+import { FieldInput, fieldText, hm } from "./TaskExtras";
 
 type Key = "title" | "status" | "due" | "priority" | "owner";
 const PRIO_RANK: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
 /** Every task in a sortable table. Status and due date can be changed in place. */
-export function TableView({ cards, onOpen, canEdit, showProject }: { cards: Card[]; onOpen: (id: string) => void; canEdit: boolean; showProject?: boolean }) {
+export function TableView({ cards, onOpen, canEdit, showProject, boardId }: { cards: Card[]; onOpen: (id: string) => void; canEdit: boolean; showProject?: boolean; boardId?: string }) {
   const s = useStore();
   const { userById, listById, labelById, boardById, isDone } = useHelpers();
   const [sort, setSort] = useState<{ key: Key; asc: boolean }>({ key: "status", asc: true });
+  const fields = (boardId && s.boards.find((b) => b.id === boardId)?.fields) || [];
+  const staff = s.me.role === "admin" || s.me.role === "member";
+  const timeByCard = useMemo(() => {
+    const m = new Map<string, number>();
+    s.timeEntries.forEach((e) => m.set(e.cardId, (m.get(e.cardId) ?? 0) + e.minutes));
+    return m;
+  }, [s.timeEntries]);
 
   const listPos = useMemo(() => {
     const m = new Map<string, number>();
@@ -61,7 +69,7 @@ export function TableView({ cards, onOpen, canEdit, showProject }: { cards: Card
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
-      <table className="w-full min-w-[760px] text-sm">
+      <table className="w-full text-sm" style={{ minWidth: 760 + fields.length * 140 }}>
         <thead>
           <tr className="border-b border-line text-left text-[11px] tracking-wide text-faint uppercase">
             <Th k="title" className="pl-5">Task</Th>
@@ -70,6 +78,12 @@ export function TableView({ cards, onOpen, canEdit, showProject }: { cards: Card
             <Th k="due">Due</Th>
             <Th k="priority">Priority</Th>
             <th className="px-3 py-2.5 font-semibold">Labels</th>
+            {fields.map((f) => (
+              <th key={f.id} className="px-3 py-2.5 font-semibold whitespace-nowrap">
+                {f.name}
+              </th>
+            ))}
+            {staff && <th className="px-3 py-2.5 pr-5 text-right font-semibold">Time</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
@@ -147,6 +161,12 @@ export function TableView({ cards, onOpen, canEdit, showProject }: { cards: Card
                     })}
                   </span>
                 </td>
+                {fields.map((f) => (
+                  <td key={f.id} className="px-3 py-2.5">
+                    {canEdit ? <FieldInput f={f} value={c.custom?.[f.id]} onChange={(v) => s.setCustom(c.id, f.id, v)} compact /> : <span className="text-xs">{fieldText(f, c.custom?.[f.id])}</span>}
+                  </td>
+                ))}
+                {staff && <td className="px-3 py-2.5 pr-5 text-right text-xs font-semibold text-muted">{timeByCard.get(c.id) ? hm(timeByCard.get(c.id)!) : "—"}</td>}
               </tr>
             );
           })}
