@@ -5,6 +5,7 @@ import { useHelpers, useStore } from "@/lib/store";
 import type { Card } from "@/lib/types";
 import { cn, dueState, PRIORITY } from "@/lib/format";
 import { CardModal } from "@/components/CardModal";
+import { CalendarView } from "@/components/CalendarView";
 import { AvatarStack, Button, Chip, DueChip, Empty, Icon, PageHeader, PriorityPill } from "@/components/ui";
 
 const GROUPS = [
@@ -18,7 +19,7 @@ const GROUPS = [
 export default function MyTasks() {
   const s = useStore();
   const { isDone, boardById, clientById, teamById, userById } = useHelpers();
-  const [tab, setTab] = useState<"mine" | "claim" | "assigned">("mine");
+  const [tab, setTab] = useState<"mine" | "subtasks" | "calendar" | "claim" | "assigned">("mine");
   const [client, setClient] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -26,6 +27,10 @@ export default function MyTasks() {
   const mine = live.filter((c) => c.assigneeIds.includes(s.me.id) && !isDone(c));
   const claim = live.filter((c) => c.teamId && !c.claimedBy && s.me.teamIds.includes(c.teamId));
   const byMe = live.filter((c) => c.assignedBy === s.me.id && !c.assigneeIds.includes(s.me.id) && c.assigneeIds.length > 0);
+  const subtasks = live
+    .filter((c) => !isDone(c))
+    .flatMap((c) => c.checklist.filter((i) => i.assigneeId === s.me.id && !i.done).map((i) => ({ c, i })))
+    .sort((a, b) => (a.i.due ?? "9").localeCompare(b.i.due ?? "9"));
   const doneWeek = s.cards.filter((c) => c.assigneeIds.includes(s.me.id) && isDone(c)).length;
 
   const sortP = (a: Card, b: Card) => PRIORITY[a.priority].rank - PRIORITY[b.priority].rank || (a.due ?? "9").localeCompare(b.due ?? "9");
@@ -75,6 +80,8 @@ export default function MyTasks() {
           {(
             [
               ["mine", `Assigned to me (${mine.length})`],
+              ["subtasks", `Subtasks (${subtasks.length})`],
+              ["calendar", "Calendar"],
               ["claim", `Team tasks to claim (${claim.length})`],
               ["assigned", `Assigned by me (${byMe.length})`],
             ] as const
@@ -117,6 +124,30 @@ export default function MyTasks() {
             })}
           </div>
         ))}
+
+      {tab === "subtasks" &&
+        (subtasks.length === 0 ? (
+          <Empty title="No subtasks for you" sub="When someone gives you a step inside a task, it shows up here." />
+        ) : (
+          <section className="overflow-hidden rounded-2xl border border-line bg-surface">
+            <ul className="divide-y divide-line">
+              {subtasks.map(({ c, i }) => (
+                <li key={i.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                  <input type="checkbox" checked={i.done} onChange={() => s.toggleCheck(c.id, i.id)} className="h-4 w-4 accent-[var(--color-brand)]" aria-label={`Done: ${i.text}`} />
+                  <span className="min-w-0 flex-1 basis-52">
+                    <span className="block truncate text-sm font-medium">{i.text}</span>
+                    <button onClick={() => setOpenId(c.id)} className="block truncate text-left text-xs text-muted hover:underline">
+                      in “{c.title}” · {boardById(c.boardId)?.name}
+                    </button>
+                  </span>
+                  <DueChip due={i.due} compact />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+
+      {tab === "calendar" && <CalendarView cards={live.filter((c) => c.assigneeIds.includes(s.me.id))} onOpen={setOpenId} showProject />}
 
       {tab === "claim" &&
         (claim.length === 0 ? (

@@ -8,6 +8,8 @@ import type { Card } from "@/lib/types";
 import { cn, dueState } from "@/lib/format";
 import { Kanban } from "@/components/Kanban";
 import { CardModal } from "@/components/CardModal";
+import { TableView } from "@/components/TableView";
+import { CalendarView } from "@/components/CalendarView";
 import { Avatar, AvatarStack, Empty, Icon } from "@/components/ui";
 
 export default function BoardPage() {
@@ -26,6 +28,7 @@ function BoardInner() {
   const path = usePathname();
   const params = useSearchParams();
   const openId = params.get("card");
+  const view = (params.get("view") as "board" | "table" | "calendar" | null) ?? "board";
   const [who, setWho] = useState<string>("");
   const [label, setLabel] = useState<string>("");
   const [due, setDue] = useState<"" | "overdue" | "week">("");
@@ -36,7 +39,15 @@ function BoardInner() {
     return <Empty title="Project not found" sub="It may have been removed, or you don't have access."><Link href="/" className="text-sm font-semibold text-brand">Back home</Link></Empty>;
   }
   const client = clientById(board.clientId);
-  const open = (cid: string | null) => router.replace(cid ? `${path}?card=${cid}` : path, { scroll: false });
+  const url = (v: string, cid: string | null) => {
+    const q = new URLSearchParams();
+    if (v !== "board") q.set("view", v);
+    if (cid) q.set("card", cid);
+    const qs = q.toString();
+    return qs ? `${path}?${qs}` : path;
+  };
+  const open = (cid: string | null) => router.replace(url(view, cid), { scroll: false });
+  const setView = (v: string) => router.replace(url(v, null), { scroll: false });
   const filtering = !!(who || label || due);
   const dim = (c: Card) => {
     if (who === "me" && !c.assigneeIds.includes(s.me.id)) return true;
@@ -47,6 +58,7 @@ function BoardInner() {
     return false;
   };
   const archived = s.cards.filter((c) => c.boardId === id && c.archived);
+  const visibleCards = s.cards.filter((c) => c.boardId === id && !c.archived && !dim(c));
   const requests = s.requests.filter((r) => r.boardId === id && r.status === "new");
 
   return (
@@ -91,6 +103,25 @@ function BoardInner() {
 
       {/* filters */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="mr-1 inline-flex rounded-lg border border-line bg-surface p-0.5" role="tablist" aria-label="View">
+          {(
+            [
+              ["board", "Board", "grid"],
+              ["table", "Table", "table"],
+              ["calendar", "Calendar", "calendar"],
+            ] as const
+          ).map(([v, l, ic]) => (
+            <button
+              key={v}
+              role="tab"
+              aria-selected={view === v}
+              onClick={() => setView(v)}
+              className={cn("inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold", view === v ? "bg-ink text-white" : "text-ink-soft hover:bg-sunken")}
+            >
+              <Icon name={ic} size={14} /> {l}
+            </button>
+          ))}
+        </div>
         <FilterBtn on={who === "me"} onClick={() => setWho(who === "me" ? "" : "me")}>
           <Avatar user={s.me} size={18} /> My cards
         </FilterBtn>
@@ -153,7 +184,9 @@ function BoardInner() {
         </div>
       )}
 
-      <Kanban boardId={board.id} onOpen={open} dim={filtering ? dim : undefined} />
+      {view === "board" && <Kanban boardId={board.id} onOpen={open} dim={filtering ? dim : undefined} />}
+      {view === "table" && <TableView cards={visibleCards} onOpen={open} canEdit={s.me.role !== "viewer"} />}
+      {view === "calendar" && <CalendarView cards={visibleCards} onOpen={open} />}
       <CardModal cardId={openId} onClose={() => open(null)} />
     </div>
   );

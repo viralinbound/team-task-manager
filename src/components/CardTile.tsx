@@ -56,6 +56,11 @@ export function CardTile({ card, onOpen, dragging, showBoard, client }: { card: 
             <Icon name="chat" size={13} /> {comments}
           </span>
         )}
+        {card.repeat && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-muted" title={`Repeats ${card.repeat}`}>
+            <Icon name="repeat" size={13} />
+          </span>
+        )}
         {card.attachments.length > 0 && (
           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted">
             <Icon name="clip" size={13} /> {card.attachments.length}

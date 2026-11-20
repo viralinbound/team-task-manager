@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useHelpers, useStore } from "@/lib/store";
+import { nextDue, useHelpers, useStore } from "@/lib/store";
 import { Attachments } from "./Attachments";
-import type { Priority } from "@/lib/types";
+import type { Card, Priority } from "@/lib/types";
 import { cn, PRIORITY, timeAgo } from "@/lib/format";
 import { Avatar, Button, DueChip, Icon, inputCls, Modal, PriorityPill, Progress } from "./ui";
 
@@ -142,7 +142,7 @@ export function CardModal({ cardId, onClose, client }: { cardId: string | null; 
           {(card.checklist.length > 0 || canEdit) && (
             <section>
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-xs font-semibold tracking-wide text-faint uppercase">Checklist</h3>
+                <h3 className="text-xs font-semibold tracking-wide text-faint uppercase">Subtasks</h3>
                 {card.checklist.length > 0 && (
                   <span className="text-xs font-medium text-muted">
                     {checked} of {card.checklist.length}
@@ -151,14 +151,47 @@ export function CardModal({ cardId, onClose, client }: { cardId: string | null; 
               </div>
               {card.checklist.length > 0 && <Progress value={checked / card.checklist.length} className="mb-3" />}
               <ul className="space-y-1">
-                {card.checklist.map((i) => (
-                  <li key={i.id}>
-                    <label className={cn("flex items-center gap-3 rounded-lg px-2 py-1.5", canEdit && "cursor-pointer hover:bg-canvas")}>
-                      <input type="checkbox" checked={i.done} disabled={!canEdit} onChange={() => s.toggleCheck(card.id, i.id)} className="h-4 w-4 accent-[var(--color-brand)]" />
-                      <span className={cn("text-sm", i.done ? "text-faint line-through" : "text-ink")}>{i.text}</span>
-                    </label>
-                  </li>
-                ))}
+                {card.checklist.map((i) => {
+                  const owner = userById(i.assigneeId);
+                  return (
+                    <li key={i.id} className={cn("group flex items-center gap-2 rounded-lg px-2 py-1.5", canEdit && "hover:bg-canvas")}>
+                      <input type="checkbox" checked={i.done} disabled={!canEdit} onChange={() => s.toggleCheck(card.id, i.id)} className="h-4 w-4 shrink-0 accent-[var(--color-brand)]" aria-label={`Done: ${i.text}`} />
+                      <span className={cn("min-w-0 flex-1 text-sm", i.done ? "text-faint line-through" : "text-ink")}>{i.text}</span>
+                      {canEdit ? (
+                        <>
+                          <select
+                            value={i.assigneeId ?? ""}
+                            onChange={(e) => s.updateCheck(card.id, i.id, { assigneeId: e.target.value || undefined })}
+                            className={cn("h-7 max-w-[7.5rem] rounded-md border border-line bg-surface px-1 text-[11px]", !i.assigneeId && "text-faint")}
+                            aria-label="Subtask owner"
+                          >
+                            <option value="">No owner</option>
+                            {members.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name.split(" ")[0]}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="date"
+                            value={i.due ?? ""}
+                            onChange={(e) => s.updateCheck(card.id, i.id, { due: e.target.value || undefined })}
+                            className={cn("h-7 w-[7.6rem] rounded-md border border-line bg-surface px-1 text-[11px]", !i.due && "text-faint")}
+                            aria-label="Subtask due date"
+                          />
+                          <button onClick={() => s.removeCheck(card.id, i.id)} className="rounded p-0.5 text-faint opacity-0 group-hover:opacity-100 hover:text-urgent focus:opacity-100" aria-label={`Remove ${i.text}`}>
+                            <Icon name="x" size={14} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {owner && <Avatar user={owner} size={20} />}
+                          {i.due && <DueChip due={i.due} done={i.done} compact />}
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
               {canEdit && (
                 <form
@@ -169,7 +202,7 @@ export function CardModal({ cardId, onClose, client }: { cardId: string | null; 
                     setNewCheck("");
                   }}
                 >
-                  <input value={newCheck} onChange={(e) => setNewCheck(e.target.value)} placeholder="Add an item" className={inputCls} />
+                  <input value={newCheck} onChange={(e) => setNewCheck(e.target.value)} placeholder="Add a subtask" className={inputCls} />
                   <Button variant="outline" type="submit">
                     Add
                   </Button>
@@ -356,6 +389,28 @@ export function CardModal({ cardId, onClose, client }: { cardId: string | null; 
               <DueChip due={card.due} done={done} />
             )}
           </Side>
+
+          {canEdit ? (
+            <Side label="Repeat">
+              <select
+                value={card.repeat ?? ""}
+                onChange={(e) => s.updateCard(card.id, { repeat: (e.target.value || undefined) as Card["repeat"] }, e.target.value ? `set this to repeat ${e.target.value}` : "stopped repeating this")}
+                className={inputCls}
+              >
+                <option value="">Does not repeat</option>
+                <option value="daily">Every day</option>
+                <option value="weekly">Every week</option>
+                <option value="monthly">Every month</option>
+              </select>
+              {card.repeat && <p className="mt-1.5 text-[11px] text-muted">When this is done, the next one is created automatically{card.due ? ` (due ${new Date(`${nextDue(card.due, card.repeat)}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })})` : ""}.</p>}
+            </Side>
+          ) : (
+            card.repeat && (
+              <Side label="Repeat">
+                <p className="text-sm capitalize">{card.repeat}</p>
+              </Side>
+            )
+          )}
 
           <Side label="Priority">
             {canEdit ? (

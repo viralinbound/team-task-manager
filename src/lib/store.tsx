@@ -10,12 +10,14 @@ import type {
   Attachment,
   Board,
   Card,
+  ChecklistItem,
   Client,
   ClientRequest,
   Label,
   List,
   Notification,
   Priority,
+  Repeat,
   Team,
   User,
 } from "./types";
@@ -53,6 +55,66 @@ const uid = (_prefix: string) =>
 const EMPTY: Data = { users: [], teams: [], clients: [], boards: [], lists: [], cards: [], labels: [], requests: [], notifications: [], activity: [], currentUserId: "" };
 const NOBODY: User = { id: "", name: "", email: "", role: "viewer", title: "", teamIds: [], color: "#1f6f5c" };
 
+const DAY_MS = 86_400_000;
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+/** Next due date for a repeating task, never in the past. */
+export function nextDue(due: string | undefined, rule: Repeat): string {
+  const today = isoDay(new Date());
+  let d = new Date(`${due ?? today}T00:00:00Z`);
+  do {
+    if (rule === "daily") d = new Date(d.getTime() + DAY_MS);
+    else if (rule === "weekly") d = new Date(d.getTime() + 7 * DAY_MS);
+    else d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()));
+  } while (isoDay(d) < today);
+  return isoDay(d);
+}
+
+/** Move `d` by the same number of days that `from` moves to reach `to`. */
+function shiftDate(d: string | undefined, from: string | undefined, to: string): string | undefined {
+  if (!d || !from) return d;
+  const delta = new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime();
+  return isoDay(new Date(new Date(`${d}T00:00:00Z`).getTime() + delta));
+}
+
+/**
+ * When a repeating task moves into a Done column: it stops repeating, and the next one is created.
+ * Live mode only clears the flag here; the database trigger creates the next task (so it also works
+ * for client approvals and other people's screens).
+ */
+function applyRepeats(prev: Data, next: Data): Data {
+  if (prev === next || prev.cards === next.cards) return next;
+  const doneLists = new Set(next.lists.filter((l) => l.kind === "done").map((l) => l.id));
+  const before = new Map(prev.cards.map((c) => [c.id, c]));
+  const spawned: Card[] = [];
+  let changed = false;
+  const cards = next.cards.map((c) => {
+    const old = before.get(c.id);
+    const rule = c.repeat ?? old?.repeat;
+    if (!rule || !old || old.listId === c.listId || !doneLists.has(c.listId)) return c;
+    changed = true;
+    if (!LIVE) {
+      const boardLists = next.lists.filter((l) => l.boardId === c.boardId);
+      const target = boardLists.find((l) => !l.kind) ?? boardLists[0];
+      spawned.push({
+        ...c,
+        id: uid("k"),
+        listId: target.id,
+        order: -1,
+        due: nextDue(c.due, rule),
+        checklist: c.checklist.map((i) => ({ ...i, done: false, due: shiftDate(i.due, c.due, nextDue(c.due, rule)) })),
+        comments: [],
+        attachments: [],
+        archived: false,
+        repeat: rule,
+        createdAt: new Date().toISOString(),
+        history: [{ at: new Date().toISOString(), userId: next.currentUserId, text: `repeats ${rule} (created automatically)` }],
+      });
+    }
+    return { ...c, repeat: undefined };
+  });
+  return changed ? { ...next, cards: [...cards, ...spawned] } : next;
+}
+
 const initial = (): Data => (LIVE ? EMPTY : {
   users: seed.users,
   teams: seed.teams,
@@ -68,7 +130,11 @@ const initial = (): Data => (LIVE ? EMPTY : {
 });
 
 function useStoreValue() {
-  const [data, setData] = useState<Data>(initial);
+  const [data, setDataRaw] = useState<Data>(initial);
+  // Every change passes through here so recurring tasks behave the same everywhere (drag, status menu, client approval).
+  const setData = useCallback((next: Data | ((d: Data) => Data)) => {
+    setDataRaw((prev) => applyRepeats(prev, typeof next === "function" ? next(prev) : next));
+  }, []);
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -354,6 +420,24 @@ function useStoreValue() {
         ...d,
         cards: d.cards.map((c) => (c.id === id ? { ...c, checklist: c.checklist.map((i) => (i.id === itemId ? { ...i, done: !i.done } : i)) } : c)),
       })),
+
+    /** Subtask owner / due date / text. Notifies a newly chosen owner. */
+    updateCheck: (id: string, itemId: string, patch: Partial<Omit<ChecklistItem, "id">>) =>
+      setData((d) => {
+        const c = d.cards.find((x) => x.id === id);
+        if (!c) return d;
+        const item = c.checklist.find((i) => i.id === itemId);
+        const newOwner = patch.assigneeId && patch.assigneeId !== item?.assigneeId ? patch.assigneeId : undefined;
+        return {
+          ...d,
+          cards: d.cards.map((x) => (x.id === id ? { ...x, checklist: x.checklist.map((i) => (i.id === itemId ? { ...i, ...patch } : i)) } : x)),
+          notifications: newOwner
+            ? notify(d, [newOwner], `${name(d, d.currentUserId)} gave you a subtask: “${patch.text ?? item?.text}” on “${c.title}”`, `/boards/${c.boardId}?card=${id}`, "assigned")
+            : d.notifications,
+        };
+      }),
+    removeCheck: (id: string, itemId: string) =>
+      setData((d) => ({ ...d, cards: d.cards.map((c) => (c.id === id ? { ...c, checklist: c.checklist.filter((i) => i.id !== itemId) } : c)) })),
 
     addCheck: (id: string, text: string) =>
       setData((d) => ({

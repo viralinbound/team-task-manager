@@ -27,6 +27,10 @@ import {
   MessageSquare,
   Paperclip,
   Plus,
+  Repeat as RepeatIcon,
+  Table2,
+  ChevronLeft,
+  ChevronRight,
   Search,
   Settings,
   Sparkles,
@@ -75,6 +79,10 @@ const ICONS: Record<string, LucideIcon> = {
   grid: LayoutGrid,
   rows: ListIcon,
   calendar: Calendar,
+  repeat: RepeatIcon,
+  table: Table2,
+  prev: ChevronLeft,
+  next: ChevronRight,
 };
 
 export function Icon({ name, className, size = 18, fill }: { name: string; className?: string; size?: number; fill?: boolean }) {

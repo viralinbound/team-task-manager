@@ -60,7 +60,13 @@ export interface ChecklistItem {
   id: string;
   text: string;
   done: boolean;
+  /** Subtask owner (optional). */
+  assigneeId?: string;
+  /** Subtask due date, YYYY-MM-DD (optional). */
+  due?: string;
 }
+
+export type Repeat = "daily" | "weekly" | "monthly";
 
 export interface Comment {
   id: string;
@@ -98,6 +104,8 @@ export interface Card {
   history: HistoryItem[];
   attachments: Attachment[];
   cover?: string;
+  /** Re-create this task with the next due date when it is marked done. */
+  repeat?: Repeat;
 }
 
 /** A file on a task. Live: `path` points into the private "attachments" bucket. Demo: `url` is a local preview. */

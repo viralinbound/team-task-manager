@@ -86,6 +86,7 @@ const fromCard = (r: Row, comments: Comment[]): Card => ({
   history: (r.history as Card["history"]) ?? [],
   attachments: (r.attachments as Card["attachments"]) ?? [],
   cover: u(r.cover as string),
+  repeat: u(r.repeat as Card["repeat"]),
 });
 const fromComment = (r: Row): Comment => ({ id: r.id as string, userId: r.user_id as string, text: r.text as string, internal: r.internal as boolean, at: r.created_at as string });
 const fromRequest = (r: Row): ClientRequest => ({
@@ -150,6 +151,7 @@ const toRow = {
     client_visible: c.clientVisible,
     archived: !!c.archived,
     cover: n(c.cover),
+    repeat: n(c.repeat),
   }),
   requests: (r: ClientRequest) => ({ id: r.id, client_id: r.clientId, board_id: r.boardId, title: r.title, description: r.description, priority: r.priority, wanted_by: n(r.wantedBy), status: r.status }),
   notifications: (x: Notification) => ({ id: x.id, user_id: x.userId, text: x.text, href: x.href, kind: x.kind, read: x.read }),
