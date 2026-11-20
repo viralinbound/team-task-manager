@@ -92,6 +92,27 @@ export default function SettingsPage() {
           </form>
         </Panel>
 
+        {s.live && (
+          <Panel title="Email">
+            <div className="divide-y divide-line">
+              {(
+                [
+                  ["emailAlerts", "Instant emails", "When a task is assigned to you, someone @mentions you, a client approves or asks for changes, or a client raises a request."],
+                  ["emailDigest", "Daily digest at 9:00 am", "Your overdue tasks, today's tasks, the rest of the week, and team tasks to claim. Skipped on days with nothing for you."],
+                ] as const
+              ).map(([key, label, hint]) => (
+                <label key={key} className="flex cursor-pointer items-start gap-3 px-5 py-4">
+                  <input type="checkbox" checked={s.me[key] !== false} onChange={(e) => s.updateMe({ [key]: e.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]" />
+                  <span>
+                    <span className="block text-sm font-semibold">{label}</span>
+                    <span className="block text-xs text-muted">{hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </Panel>
+        )}
+
         {!s.live && (
         <>
         <Panel title="Notifications">

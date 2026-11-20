@@ -36,6 +36,8 @@ const fromProfile = (r: Row): User => ({
   clientId: u(r.client_id as string),
   color: r.color as string,
   photo: u(r.photo as string),
+  emailAlerts: r.email_alerts !== false,
+  emailDigest: r.email_digest !== false,
 });
 const fromClient = (r: Row): Client => ({
   id: r.id as string,
@@ -152,7 +154,7 @@ const toRow = {
   requests: (r: ClientRequest) => ({ id: r.id, client_id: r.clientId, board_id: r.boardId, title: r.title, description: r.description, priority: r.priority, wanted_by: n(r.wantedBy), status: r.status }),
   notifications: (x: Notification) => ({ id: x.id, user_id: x.userId, text: x.text, href: x.href, kind: x.kind, read: x.read }),
   activity: (a: Activity) => ({ id: a.id, text: a.text, board_id: n(a.boardId) }),
-  profiles: (p: User) => ({ name: p.name, title: p.title, photo: n(p.photo), color: p.color }),
+  profiles: (p: User) => ({ name: p.name, title: p.title, photo: n(p.photo), color: p.color, email_alerts: p.emailAlerts !== false, email_digest: p.emailDigest !== false }),
 };
 
 /* ---------------- read ---------------- */

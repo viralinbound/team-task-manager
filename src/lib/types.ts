@@ -11,6 +11,10 @@ export interface User {
   clientId?: string;
   color: string;
   photo?: string;
+  /** Live only: instant emails for assignments, mentions, approvals, requests. */
+  emailAlerts?: boolean;
+  /** Live only: the 9 am daily digest. */
+  emailDigest?: boolean;
 }
 
 export interface Team {

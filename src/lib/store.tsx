@@ -498,7 +498,7 @@ function useStoreValue() {
     fileUrl: async (a: Attachment) => (LIVE && a.path ? attachmentUrl(a.path) : a.url ?? a.thumb ?? ""),
 
     /** Your own name, title and photo. */
-    updateMe: (patch: Partial<Pick<User, "name" | "title" | "photo">>) =>
+    updateMe: (patch: Partial<Pick<User, "name" | "title" | "photo" | "emailAlerts" | "emailDigest">>) =>
       setData((d) => ({ ...d, users: d.users.map((x) => (x.id === d.currentUserId ? { ...x, ...patch } : x)) })),
     uploadPhoto: async (file: File): Promise<string> => {
       if (LIVE) return uploadAvatar(data.currentUserId, file);
