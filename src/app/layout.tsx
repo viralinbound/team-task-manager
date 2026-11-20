@@ -1,19 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans, Fraunces } from "next/font/google";
+// Fonts are bundled with the app (no build-time download from Google).
+import "@fontsource-variable/plus-jakarta-sans/wght.css";
+import "@fontsource/fraunces/latin-500.css";
+import "@fontsource/fraunces/latin-600.css";
 import "./globals.css";
 import { StoreProvider } from "@/lib/store";
 import { RegisterSW } from "@/components/RegisterSW";
-
-const jakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
-  subsets: ["latin"],
-});
-
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
-  weight: ["500", "600"],
-});
 
 export const metadata: Metadata = {
   title: "Workboard",
@@ -31,7 +23,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${jakarta.variable} ${fraunces.variable} antialiased`}>
+      <body className="antialiased">
         <StoreProvider>{children}</StoreProvider>
         <RegisterSW />
       </body>

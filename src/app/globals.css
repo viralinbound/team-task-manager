@@ -25,10 +25,10 @@
   --color-ok-soft: #e4f3e9;
 }
 
-/* inline: these point at next/font variables set on <body>, so they must resolve where used */
+/* fonts: self-hosted via @fontsource (imported in layout.tsx) */
 @theme inline {
-  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
 }
 
 html,
